@@ -1,0 +1,12 @@
+# macOS
+.DS_Store
+
+# Skill packaging artifacts
+*.zip
+dist/
+
+# Local test artifacts (not part of the skill)
+test/
+*.jpg
+*.jpeg
+*.log
