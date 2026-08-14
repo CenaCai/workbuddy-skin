@@ -265,14 +265,16 @@ function buildDefaultCss(dataUrl, opacity, cardBg, textInfo) {
   // 左侧聊天/任务栏（conversation-sidebar）：动态透明化 JS 会把它设成
   // 内联 background-color:transparent 让壁纸透出，但在复杂/深色壁纸上白字
   // 会糊。这里用 !important 压过内联透明，加半透明深色底 + 磨砂，压暗背景、
-  // 让侧栏文字清晰。背景图在侧栏内几乎不可见，但换来稳定可读性。
+  // 让侧栏文字清晰。遮罩不宜过深（会吃掉背景、且 app 侧置顶项黑字在深底上
+  // 几乎不可见），故保持在 0.60 左右并只做轻磨砂。
   const sidebarRules = `
 /* 左侧侧边栏：磨砂半透明深色底，保证文字在复杂壁纸上可读 */
 .conversation-sidebar {
-  background-color: rgba(18,20,26,0.78) !important;
+  background-color: rgba(22,24,32,0.60) !important;
   background-image: none !important;
-  backdrop-filter: blur(10px) !important;
-  -webkit-backdrop-filter: blur(10px) !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+  border-right: 1px solid rgba(255,255,255,0.06) !important;
 }
 `;
   const textRules = textInfo ? buildTextRules(textInfo) : '';
@@ -294,7 +296,7 @@ ${textRules}
 }
 
 /** 注入后执行的 JS：动态透明化“遮挡背景的大容器”，让 body 背景透出 */
-function buildInjectJs(css) {
+function buildInjectJs(css, textInfo) {
   return `(function () {
   var STYLE_ID = '__wb_skin_style__';
   var old = document.getElementById(STYLE_ID);
@@ -352,6 +354,33 @@ function buildInjectJs(css) {
     }
     transparentized.push(t.tag + (t.cls ? '.' + t.cls.split(' ')[0] : '') + (t.id ? '#' + t.id : ''));
   }
+
+${textInfo ? `
+  /* 兜底：侧栏内部分文本（如置顶对话标题/时间）被 app 用更高 specificity 的
+     !important 黑字规则覆盖，文档层 CSS 赢不过它；内联 style 的 !important
+     优先级高于任何选择器，故这里直接对深色文字元素强制自适应文字色 */
+  (function(){
+    var sb = document.querySelector('.conversation-sidebar'); if (!sb) return;
+    var tc = ${JSON.stringify(textInfo.textColor)}, ts = ${JSON.stringify(textInfo.textShadow || '')};
+    var nodes = sb.querySelectorAll('*');
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      if (el.children.length > 0) continue;
+      if (!el.textContent || !el.textContent.trim()) continue;
+      var tag = el.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'BUTTON' || tag === 'A' || tag === 'SELECT' || tag === 'CODE' || tag === 'PRE') continue;
+      var cs = window.getComputedStyle(el);
+      var inner = cs.color.split('(')[1]; if (!inner) continue;
+      inner = inner.split(')')[0].split(',');
+      var lum = 0.299*(+inner[0]) + 0.587*(+inner[1]) + 0.114*(+inner[2]);
+      if (!isNaN(lum) && lum < 120) {
+        el.style.setProperty('color', tc, 'important');
+        if (ts) el.style.setProperty('text-shadow', ts, 'important');
+        el.dataset.wbSkinText = '1';
+      }
+    }
+  })();
+` : ''}
   return {
     viewport: vw + 'x' + vh,
     candidateContainers: found.slice(0, 8),
@@ -404,8 +433,15 @@ async function main() {
         delete els[i].dataset.wbSkinOrigBg;
         delete els[i].dataset.wbSkinOrigImg;
       }
+      // 清理内联 important 强制文字色（侧栏兜底）
+      var txt = document.querySelectorAll('[data-wb-skin-text]');
+      for (var j = 0; j < txt.length; j++) {
+        txt[j].style.removeProperty('color');
+        txt[j].style.removeProperty('text-shadow');
+        delete txt[j].dataset.wbSkinText;
+      }
       var s = document.getElementById('__wb_skin_style__'); if (s) s.remove();
-      return 'restored ' + n + ' containers';
+      return 'restored ' + n + ' containers, cleared ' + txt.length + ' forced text';
     })()`;
     for (const t of chosen) {
       try {
@@ -439,7 +475,7 @@ async function main() {
   const css = a.css
     ? await readFile(resolve(a.css), 'utf8')
     : buildDefaultCss(dataUrl, a.opacity, effectiveCardBg, textInfo);
-  const injectJs = buildInjectJs(css);
+  const injectJs = buildInjectJs(css, textInfo);
 
   console.log(dataUrl
     ? `注入背景图：${resolve(a.image)}（遮罩 ${a.opacity}，内容底纹 ${effectiveCardBg}${textInfo ? '，自动文字 ' + textInfo.mode : ''}）`

@@ -1,6 +1,6 @@
 # 更新日志 / Changelog
 
-本文件记录 **workbuddy-skin** 技能的演变过程。当前最新版本为 **v0.4.1**。
+本文件记录 **workbuddy-skin** 技能的演变过程。当前最新版本为 **v0.4.2**。
 
 ---
 
@@ -93,6 +93,12 @@ node scripts/inject.mjs --list
 ---
 
 ## 版本历史
+
+### v0.4.2 — 2026-08-14
+
+- **修复左侧栏“置顶对话”黑字看不清**：真实 DOM 探测发现，侧栏里被 app 用**更高 specificity 的 `!important` 黑字规则**（如置顶对话的标题 `_title_11ei8_23`、时间 `_time_11ei8_231`，specificity `0,2,0`）覆盖，文档层 CSS 的 `[class*="sidebar"] *`（`0,1,1`）赢不过它，导致约 53 个置顶项文字在深色磨砂底上几乎不可见。实验确认：内联 `style` 的 `!important` 优先级高于任何选择器（含 `!important`），因此 `buildInjectJs` 在注入 JS 末尾追加一段兜底逻辑——遍历 `.conversation-sidebar` 内“叶子文本元素”，对计算亮度 `<120` 者用 `setProperty('color', tc, 'important')` 强制套用自适应文字色，并用 `dataset.wbSkinText` 标记；`--restore` 时一并清理。验证：重新注入后侧栏文字分布由「592 白 + 53 黑」变为「645 全白」。
+- **调浅左侧栏磨砂底**：`sidebarRules` 背景由 `rgba(18,20,26,0.78)` + `blur(10px)` 调整为 `rgba(22,24,32,0.60)` + `blur(8px)`（仍保留 `!important` 压过动态透明化），让背景图在侧栏透出更多、整体更融合，同时白字依旧清晰；并补一条极淡的右侧分隔线 `border-right: 1px solid rgba(255,255,255,0.06)`。
+- 提交：待补
 
 ### v0.4.1 — 2026-08-14
 
