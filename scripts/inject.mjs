@@ -262,6 +262,19 @@ function buildDefaultCss(dataUrl, opacity, cardBg, textInfo) {
   -webkit-backdrop-filter: blur(4px) !important;
 }
 `;
+  // 左侧聊天/任务栏（conversation-sidebar）：动态透明化 JS 会把它设成
+  // 内联 background-color:transparent 让壁纸透出，但在复杂/深色壁纸上白字
+  // 会糊。这里用 !important 压过内联透明，加半透明深色底 + 磨砂，压暗背景、
+  // 让侧栏文字清晰。背景图在侧栏内几乎不可见，但换来稳定可读性。
+  const sidebarRules = `
+/* 左侧侧边栏：磨砂半透明深色底，保证文字在复杂壁纸上可读 */
+.conversation-sidebar {
+  background-color: rgba(18,20,26,0.78) !important;
+  background-image: none !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+}
+`;
   const textRules = textInfo ? buildTextRules(textInfo) : '';
   return `
 html { background: transparent !important; }
@@ -274,6 +287,7 @@ body {
   background-repeat: no-repeat !important;
 }
 ${topbarRules}
+${sidebarRules}
 ${cardRules}
 ${textRules}
 `;

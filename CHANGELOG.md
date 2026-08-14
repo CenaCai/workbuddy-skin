@@ -1,6 +1,6 @@
 # 更新日志 / Changelog
 
-本文件记录 **workbuddy-skin** 技能的演变过程。当前最新版本为 **v0.4.0**。
+本文件记录 **workbuddy-skin** 技能的演变过程。当前最新版本为 **v0.4.1**。
 
 ---
 
@@ -93,6 +93,12 @@ node scripts/inject.mjs --list
 ---
 
 ## 版本历史
+
+### v0.4.1 — 2026-08-14
+
+- **左侧栏磨砂半透明深色底（增强复杂/深色壁纸可读性）**：真实 DOM 探测确认左侧栏容器为 `.conversation-sidebar`（约 264×799）。动态透明化 JS 会把它设成内联 `background-color: transparent` 让壁纸透出，但在复杂/深色壁纸上白字会叠在人物、图案上导致糊。新增 `sidebarRules`，以 `!important` 压过内联透明，给侧栏加 `background-color: rgba(18,20,26,0.78)` + `backdrop-filter: blur(10px)`，压暗并模糊背景，换取稳定可读性（背景图在侧栏内几乎不可见）。已用 computed style 验证生效。
+- **修复 `--auto-text` CLI 参数解析**：原实现把布尔 flag 当有值参数处理，无值时报"缺少参数"；现支持 `--auto-text`（无值启用）、`--auto-text=false`、`--auto-text false` 三种写法。
+- 提交：待补
 
 ### v0.4.0 — 2026-08-14
 
