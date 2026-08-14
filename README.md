@@ -4,6 +4,8 @@
 
 > 原理与 [Fei-Away/Codex-Dream-Skin](https://github.com/Fei-Away/Codex-Dream-Skin) 同源（WorkBuddy 与 Codex 同为 Electron/Chromium），但 WorkBuddy 的 DOM 与 Codex 不同，因此本方案用**动态透明化启发式**自适应真实界面，而非硬编码部件选择器。
 
+📌 **当前版本 v0.3.0** · 完整设定总结与版本历史见 [CHANGELOG.md](./CHANGELOG.md)。
+
 ---
 
 ## ⚠️ 适用范围与限制
