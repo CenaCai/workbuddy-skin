@@ -80,16 +80,18 @@ export function buildSkinMenuScript({ entries, activeId, styleId = STYLE_ID, men
   // 把按钮放到顶部功能栏"对话内搜索"按钮左侧；找不到则回退到 body 右上角
   let fallbackRoot = null;
   const mountButton = () => {
-    if (button.isConnected) return true; // 已在文档中
-    // 优先定位主内容区顶部功能栏的"对话内搜索"按钮
-    const searchBtn = document.querySelector('button[aria-label*="对话内搜索"]') || document.querySelector('button[aria-label*="搜索"]');
-    const actions = searchBtn?.closest('.workbuddy-topbar-actions') || searchBtn?.closest('.conversation-list-topbar-actions');
-    if (searchBtn && actions) {
-      if (fallbackRoot && fallbackRoot.parentElement) fallbackRoot.remove(); // 退出回退容器
-      actions.insertBefore(button, searchBtn);
+    // 目标：主内容区顶部功能栏 .workbuddy-topbar-actions 内的「对话内搜索」按钮左侧。
+    // 只认主顶栏，绝不落入侧栏的「搜索」按钮（其 aria-label 同样含“搜索”二字）。
+    const mainActions = document.querySelector('.workbuddy-topbar-actions');
+    const mainSearch = mainActions && mainActions.querySelector('button[aria-label*="对话内搜索"]');
+    if (mainActions && mainSearch) {
+      if (button.parentElement === mainActions) return true; // 已在正确位置
+      if (fallbackRoot && fallbackRoot.parentElement) fallbackRoot.remove(); // 从回退容器搬回
+      mainActions.insertBefore(button, mainSearch);
       return true;
     }
-    return false;
+    // 主顶栏未就绪：若按钮已在文档中（侧栏/回退）则暂留，等主顶栏出现再搬；否则返回 false 等待
+    return button.isConnected;
   };
   let mountAttempts = 0;
   const fallbackMount = () => {
@@ -112,17 +114,34 @@ export function buildSkinMenuScript({ entries, activeId, styleId = STYLE_ID, men
   // 用 MutationObserver 监听稳定的 #root 子树：只要按钮脱离文档就尽快挂回，且只在脱离时
   // 触发一次 rAF，常态下 mutation 回调立即返回、零开销。
   let reinsertScheduled = false;
+  let relocateScheduled = false;
   const observer = new MutationObserver(() => {
-    if (button.isConnected) return;        // 还在文档里，无需处理
-    if (reinsertScheduled) return;
-    reinsertScheduled = true;
-    requestAnimationFrame(() => {
-      reinsertScheduled = false;
-      if (!button.isConnected) {
-        mountAttempts = 0;
-        tryMount();
-      }
-    });
+    // 情况1：按钮被 React 移除 -> 重新挂回（优先主顶栏）
+    if (!button.isConnected) {
+      if (reinsertScheduled) return;
+      reinsertScheduled = true;
+      requestAnimationFrame(() => {
+        reinsertScheduled = false;
+        if (!button.isConnected) { mountAttempts = 0; tryMount(); }
+      });
+      return;
+    }
+    // 情况2：按钮还在文档中，但主顶栏刚出现且它不在主顶栏 -> 自动搬到主顶栏
+    const mainActions = document.querySelector('.workbuddy-topbar-actions');
+    const mainSearch = mainActions && mainActions.querySelector('button[aria-label*="对话内搜索"]');
+    if (mainActions && mainSearch && button.parentElement !== mainActions) {
+      if (relocateScheduled) return;
+      relocateScheduled = true;
+      requestAnimationFrame(() => {
+        relocateScheduled = false;
+        const ma = document.querySelector('.workbuddy-topbar-actions');
+        const ms = ma && ma.querySelector('button[aria-label*="对话内搜索"]');
+        if (ma && ms && button.parentElement !== ma) {
+          if (fallbackRoot && fallbackRoot.parentElement) fallbackRoot.remove();
+          ma.insertBefore(button, ms);
+        }
+      });
+    }
   });
   const startObserver = () => {
     const rootEl = document.getElementById('root');

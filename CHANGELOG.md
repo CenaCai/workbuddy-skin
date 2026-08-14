@@ -108,6 +108,7 @@ node scripts/inject.mjs --list
 - **模式持久化**：`scripts/src/skin-menu.mjs` 在切换皮肤 / 自定义上传 / 原生浅色 / 原生深色时，将当前模式写入 `localStorage`（`wbSkinStudioState`：mode = `theme` | `native-light` | `native-dark` + themeId）；每次（重新）注入时按该状态自动恢复，原生模式不再随重启丢失。守护重注入后无需用户重新点选。
 - 守护 `workbuddy-skin-daemon.mjs` 移除原先的"自定义上传单独恢复"逻辑（改为由菜单统一恢复，避免与持久化原生模式冲突）。
 - **守护脚本修复（同日补丁）**：`killWb` 内使用了 `await` 却未声明为 `async`，导致脚本一启动就 `SyntaxError`、守护进程每轮轮询崩溃（launchctl 状态恒为 `1`），端口永远打不开。已改为 `async function killWb()` 并在主循环 `await` 它。修复后守护在下一轮 30s 轮询自行生效：强制重启 WorkBuddy（带端口 9222）→ 重新注入皮肤 → 顶栏「切换背景」按钮恢复。
+- **按钮挂接位置修复（同日补丁）**：`mountButton` 原先用 `button[aria-label*="对话内搜索"] || button[aria-label*="搜索"]` 选址，守护在界面未完全渲染时（主顶栏「对话内搜索」尚不存在）会命中**侧栏**的「搜索」按钮，把「切换背景」按钮插进左侧栏顶栏而非主内容区顶栏，导致用户看不到。改为**只认主内容区 `.workbuddy-topbar-actions` 内的「对话内搜索」**，绝不落入侧栏；并新增 MutationObserver「情况2」：按钮已挂载但主顶栏后来出现且它不在主顶栏时，自动搬到主顶栏。重新注入后实测 `location=MAIN_TOPBAR / left-of-搜索`。
 
 ### v0.5.4 — 2026-08-14
 
