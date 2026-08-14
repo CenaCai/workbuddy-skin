@@ -4,7 +4,7 @@
 
 > v0.5.0 融合 [cdredfox/workbuddy-skin-studio](https://github.com/cdredfox/workbuddy-skin-studio) 的核心思路：用 WorkBuddy 稳定 DOM 锚点（`#root` / `.teams-container` / `[data-view-id]`）与原生 `--cb-*` 设计令牌做全局换色，取代 v0.4.x 的“面积阈值扫描 + 逐个元素内联强制”兜底；同时加入应用内 🎨 菜单，可随时切换背景、上传自定义图片（自动取色）、一键还原。
 
-📌 **当前版本 v0.5.0** · 完整设定总结与版本历史见 [CHANGELOG.md](./CHANGELOG.md)。
+📌 **当前版本 v0.5.1** · 完整设定总结与版本历史见 [CHANGELOG.md](./CHANGELOG.md)。
 
 ---
 
@@ -77,13 +77,13 @@ node inject.mjs --image /path/to/新图.png --opacity 0.03
 # 或者直接退出 WorkBuddy 用普通方式重开，注入自动消失
 ```
 
-### 4. 应用内 🎨 菜单（v0.5.0）
+### 4. 应用内 🎨 菜单（v0.5.1）
 
-注入成功后，WorkBuddy **右上角会出现一个 🎨 按钮**，无需再开终端即可：
+注入成功后，主内容区**顶部功能栏会出现一个调色板按钮**（在“对话内搜索”左侧），无需再开终端即可：
 
 - 在当前背景与内置预设之间切换。
 - 上传本地图片，菜单会 Canvas 采样自动提取主色并生成配套配色。
-- 点击“还原原生界面”立即移除所有注入样式。
+- 点击“还原原生界面”立即移除所有注入样式，并把主题模式还原到注入前状态。
 
 如果只想用 CLI 换图、不需要菜单，加 `--no-menu`：
 

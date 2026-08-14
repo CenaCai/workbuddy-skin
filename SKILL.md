@@ -24,7 +24,7 @@ Apply a custom background image, wallpaper, or full CSS theme to the **WorkBuddy
 - v0.5.0 anchors on stable DOM selectors (`#root`, `.teams-container`, `[data-view-id]`) instead of scanning the whole DOM. The wallpaper is attached to `#root`; panels are transparentized via `--cb-bg-*` token overrides so the wallpaper shows through.
 - WorkBuddy's native `--cb-*` design tokens (`--cb-text-primary`, `--cb-bg-primary`, etc.) are overridden with `!important` to switch global text color and transparentize backgrounds. This replaces the v0.4.x inline-style fallback.
 - Frosted-glass panels use `color-mix()` + `backdrop-filter: blur(...)` for readability while preserving the wallpaper feel.
-- A Python helper (`analyze-bg.py`) samples the wallpaper and classifies it as `dark` or `light`; `inject.mjs` then auto-selects text and card colors. The in-app 🎨 menu uses page-side Canvas palette extraction for uploaded images.
+- A Python helper (`analyze-bg.py`) samples the wallpaper and classifies it as `dark` or `light`; `inject.mjs` then auto-selects text and card colors. The in-app 🎨 menu lives in the main topbar (left of the in-conversation search button) and uses page-side Canvas palette extraction for uploaded images.
 - The macOS system title bar (traffic-light row) is OS window chrome, **outside** the render layer — cannot be themed by any injection approach.
 
 ## Usage

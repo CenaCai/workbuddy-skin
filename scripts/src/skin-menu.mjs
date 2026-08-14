@@ -47,26 +47,83 @@ export function buildSkinMenuScript({ entries, activeId, styleId = STYLE_ID, men
     document.head.appendChild(style);
   }
 
+  // 移除旧菜单（包括可能已插入 topbar 的按钮和回退容器）
   document.getElementById(data.menuId)?.remove();
-  const root = document.createElement('div');
-  root.id = data.menuId;
-  root.style.cssText = 'position:fixed;top:48px;right:16px;z-index:2147483000;font:500 13px/1.4 system-ui;user-select:none;';
+  document.querySelectorAll('button[data-wb-skin-btn]').forEach((b) => {
+    const p = b.parentElement;
+    if (p && p.dataset.wbSkinFallback) p.remove();
+    else b.remove();
+  });
 
+  // 记录页面原始主题状态，用于“原生界面”时完整还原
+  const htmlEl = document.documentElement;
+  const bodyEl = document.body;
+  const originalState = {
+    htmlClasses: htmlEl.className,
+    bodyClasses: bodyEl.className,
+    htmlColorScheme: htmlEl.style.colorScheme || '',
+    bodyVscodeThemeKind: bodyEl.dataset.vscodeThemeKind,
+    bodyVscodeThemeName: bodyEl.dataset.vscodeThemeName,
+  };
+
+  // 菜单按钮：使用 WorkBuddy 同风格图标，插入顶部功能栏“对话内搜索”左侧
   const button = document.createElement('button');
   button.type = 'button';
-  button.textContent = '\\u{1F3A8}';
-  button.title = 'WorkBuddy Skin Studio';
-  button.style.cssText = 'display:block;margin-left:auto;width:38px;height:38px;border-radius:50%;border:1px solid rgba(0,0,0,.18);background:rgba(255,255,255,.92);backdrop-filter:blur(10px);box-shadow:0 3px 12px rgba(0,0,0,.24);cursor:pointer;font-size:19px;padding:0;';
+  button.className = 'wb-button wb-button--ghost wb-button--medium wb-button--icon-only';
+  button.dataset.wbSkinBtn = '1';
+  button.setAttribute('aria-label', '切换背景');
+  button.title = '切换背景';
+  button.innerHTML = '<svg viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg" width="16" height="16" class="wb-icon" aria-hidden="true"><path fill-rule="evenodd" d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM8 3a5 5 0 1 1 0 10A5 5 0 0 1 8 3Zm2.5 4a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm-3 3a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm4.5 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"/></svg>';
+
+  // 把按钮放到顶部功能栏“对话内搜索”按钮左侧；找不到则回退到 body 右上角
+  let fallbackRoot = null;
+  const mountButton = () => {
+    if (button.parentElement) return true; // 已经挂好
+    // 优先定位主内容区顶部功能栏的“对话内搜索”按钮
+    const searchBtn = document.querySelector('button[aria-label*="对话内搜索"]') || document.querySelector('button[aria-label*="搜索"]');
+    const actions = searchBtn?.closest('.workbuddy-topbar-actions') || searchBtn?.closest('.conversation-list-topbar-actions');
+    if (searchBtn && actions) {
+      actions.insertBefore(button, searchBtn);
+      return true;
+    }
+    return false;
+  };
+  if (!mountButton()) {
+    // 页面可能还在渲染 topbar，短暂轮询后回退
+    let attempts = 0;
+    const tryMount = () => {
+      if (mountButton()) return;
+      if (++attempts < 20) setTimeout(tryMount, 100);
+      else {
+        // 回退：固定悬浮在右上角
+        fallbackRoot = document.createElement('div');
+        fallbackRoot.dataset.wbSkinFallback = '1';
+        fallbackRoot.style.cssText = 'position:fixed;top:48px;right:16px;z-index:2147483000;';
+        fallbackRoot.appendChild(button);
+        document.body.appendChild(fallbackRoot);
+      }
+    };
+    tryMount();
+  }
+
+  // 下拉面板：fixed 定位，跟随按钮位置
+  const root = document.createElement('div');
+  root.id = data.menuId;
+  root.style.cssText = 'position:fixed;z-index:2147483000;font:500 13px/1.4 system-ui;user-select:none;';
 
   const panel = document.createElement('div');
   panel.style.cssText = 'display:none;margin-top:8px;min-width:210px;padding:6px;border-radius:12px;border:1px solid rgba(0,0,0,.1);background:rgba(255,255,255,.94);backdrop-filter:blur(16px);box-shadow:0 10px 30px rgba(0,0,0,.18);color:#17344f;';
 
   const rows = new Map();
+  const ACTIVE_ROW_BG = 'rgba(255, 193, 7, .18)';
+  const ACTIVE_BTN_BG = 'rgba(255, 193, 7, .22)';
   const paint = (id) => {
     for (const [rowId, row] of rows) {
-      row.style.background = rowId === id ? 'rgba(36,201,215,.16)' : 'transparent';
+      row.style.background = rowId === id ? ACTIVE_ROW_BG : 'transparent';
       row.style.fontWeight = rowId === id ? '700' : '500';
     }
+    // 按钮选中状态：浅黄色背景；原生/未选中时透明
+    button.style.backgroundColor = id ? ACTIVE_BTN_BG : '';
   };
   const row = (label, dotColor, onPick, before) => {
     const item = document.createElement('div');
@@ -103,18 +160,28 @@ export function buildSkinMenuScript({ entries, activeId, styleId = STYLE_ID, men
       html.classList.toggle(cls, dark ? isDarkCls : !isDarkCls);
     });
   };
+  const restoreOriginalMode = () => {
+    // 还原“原生界面”：把 body/html 的 class、style、dataset 恢复到菜单注入前的状态
+    bodyEl.className = originalState.bodyClasses;
+    htmlEl.className = originalState.htmlClasses;
+    htmlEl.style.colorScheme = originalState.htmlColorScheme;
+    if (originalState.bodyVscodeThemeKind === undefined) delete bodyEl.dataset.vscodeThemeKind;
+    else bodyEl.dataset.vscodeThemeKind = originalState.bodyVscodeThemeKind;
+    if (originalState.bodyVscodeThemeName === undefined) delete bodyEl.dataset.vscodeThemeName;
+    else bodyEl.dataset.vscodeThemeName = originalState.bodyVscodeThemeName;
+  };
   const setTheme = (id) => {
     const theme = data.themes.find((candidate) => candidate.id === id);
     if (!theme) return;
     style.textContent = theme.css;
-    document.documentElement.dataset.wbSkin = theme.id;
+    htmlEl.dataset.wbSkin = theme.id;
     applyMode(theme.surface);
     paint(theme.id);
   };
   const clearTheme = () => {
     style.textContent = '';
-    delete document.documentElement.dataset.wbSkin;
-    applyMode('#ffffff');
+    delete htmlEl.dataset.wbSkin;
+    restoreOriginalMode();
     paint(null);
   };
 
@@ -267,10 +334,17 @@ export function buildSkinMenuScript({ entries, activeId, styleId = STYLE_ID, men
   if (saved) ensureCustomRow(saved);
 
   button.addEventListener('click', () => {
-    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    if (panel.style.display === 'none') {
+      const rect = button.getBoundingClientRect();
+      root.style.top = (rect.bottom + 6) + 'px';
+      root.style.left = Math.max(8, rect.right - 216) + 'px';
+      panel.style.display = 'block';
+    } else {
+      panel.style.display = 'none';
+    }
   });
 
-  root.append(button, panel, picker);
+  root.append(panel, picker);
   document.body.appendChild(root);
   if (data.activeId === null) clearTheme();
   else setTheme(data.activeId);
