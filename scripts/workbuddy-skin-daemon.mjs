@@ -51,9 +51,13 @@ async function portOpen() {
     return r.ok;
   } catch { return false; }
 }
-function quitWb() {
-  if (DRY) { log('[dry] 将退出 WorkBuddy'); return; }
+async function killWb() {
+  if (DRY) { log('[dry] 将强制退出 WorkBuddy'); return; }
+  // 先礼貌退出；若仍存活（如有未保存会话弹确认框），则强制杀掉所有 WorkBuddy 进程
   runSync('osascript', ['-e', 'quit app "WorkBuddy"']);
+  for (let i = 0; i < 10; i++) { if (!wbRunning()) return; await sleep(1000); }
+  runSync('pkill', ['-9', '-f', `${APP}/Contents/MacOS/Electron`]);
+  runSync('pkill', ['-9', '-f', `${APP}/Contents/Frameworks`]);
 }
 function launchWb() {
   if (DRY) { log('[dry] 将以端口', PORT, '启动 WorkBuddy'); return; }
@@ -122,8 +126,8 @@ async function main() {
   }
 
   if (!open) {
-    log('WorkBuddy 在跑但端口未开 -> 重启（带端口）');
-    quitWb();
+    log('WorkBuddy 在跑但端口未开 -> 强制重启（带端口）');
+    await killWb();
     for (let i = 0; i < 20; i++) { if (!wbRunning()) break; await sleep(1000); }
     await sleep(2000);
     launchWb();
