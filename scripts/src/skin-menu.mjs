@@ -64,6 +64,7 @@ export function buildSkinMenuScript({ entries, activeId, styleId = STYLE_ID, men
     htmlClasses: htmlEl.className,
     bodyClasses: bodyEl.className,
     htmlColorScheme: htmlEl.style.colorScheme || '',
+    htmlTheme: htmlEl.dataset.theme,
     bodyVscodeThemeKind: bodyEl.dataset.vscodeThemeKind,
     bodyVscodeThemeName: bodyEl.dataset.vscodeThemeName,
   };
@@ -198,6 +199,10 @@ export function buildSkinMenuScript({ entries, activeId, styleId = STYLE_ID, men
     const dark = !isLightSurface(surface);
     const body = document.body;
     const html = document.documentElement;
+    // 关键：WorkBuddy 的表面令牌（--wb-home-bg-primary 等）由 html[data-theme] 驱动，
+    // 打包 CSS 里用 [data-theme="dark"] .teams-container.is-mac 以更高特异性锁定深色值。
+    // 只切 class 不够——必须同步 html[data-theme]，否则切浅色界面时深色规则依旧胜出。
+    html.dataset.theme = dark ? 'dark' : 'light';
     body.dataset.vscodeThemeKind = dark ? 'vscode-dark' : 'vscode-light';
     body.dataset.vscodeThemeName = dark ? 'IDE Dark' : 'IDE Light';
     html.style.colorScheme = dark ? 'dark' : 'light';
@@ -212,6 +217,8 @@ export function buildSkinMenuScript({ entries, activeId, styleId = STYLE_ID, men
     bodyEl.className = originalState.bodyClasses;
     htmlEl.className = originalState.htmlClasses;
     htmlEl.style.colorScheme = originalState.htmlColorScheme;
+    if (originalState.htmlTheme === undefined) delete htmlEl.dataset.theme;
+    else htmlEl.dataset.theme = originalState.htmlTheme;
     if (originalState.bodyVscodeThemeKind === undefined) delete bodyEl.dataset.vscodeThemeKind;
     else bodyEl.dataset.vscodeThemeKind = originalState.bodyVscodeThemeKind;
     if (originalState.bodyVscodeThemeName === undefined) delete bodyEl.dataset.vscodeThemeName;

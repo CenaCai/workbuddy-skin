@@ -9,8 +9,9 @@
 > - **v0.5.3**：修复"切换背景"按钮在 React 重渲染（如切换原生浅色/深色）后消失的问题——新增 `MutationObserver` 自愈挂载，按钮一旦被移除会自动挂回原位置。
 > - **v0.5.4**：新增 launchd 常驻守护（`workbuddy-skin-daemon.mjs` + LaunchAgent），让 WorkBuddy 始终带调试端口运行，并在自动更新 / 重启后自动恢复注入的皮肤，无需再手动跑 `apply-skin.sh`。
 > - **v0.5.5**：模式持久化——`原生界面（浅色）/（黑色）`与自定义皮肤选择写入 `localStorage`，守护重新注入后自动回到上次状态（原生模式不再随重启丢失）。
+> - **v0.5.6**：修复"切换原生浅色界面无效、依旧全黑"——`applyMode` 现在除切 class 外会显式同步 `html[data-theme]`（浅色→`light` / 深色→`dark`）。WorkBuddy 表面令牌 `--wb-home-bg-primary` 由 `html[data-theme]` 驱动，旧版只切 class 没动 `data-theme`，导致 `<html>` 残留的 `data-theme="dark"` 让深色规则始终胜出；修复后原生浅色界面真正变浅且不回退。
 
-📌 **当前版本 v0.5.5** · 完整设定总结与版本历史见 [CHANGELOG.md](./CHANGELOG.md)。
+📌 **当前版本 v0.5.6** · 完整设定总结与版本历史见 [CHANGELOG.md](./CHANGELOG.md)。
 
 ---
 

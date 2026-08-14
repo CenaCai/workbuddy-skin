@@ -1,6 +1,6 @@
 # 更新日志 / Changelog
 
-本文件记录 **workbuddy-skin** 技能的演变过程。当前最新版本为 **v0.5.5**。
+本文件记录 **workbuddy-skin** 技能的演变过程。当前最新版本为 **v0.5.6**。
 
 ---
 
@@ -102,6 +102,12 @@ node scripts/inject.mjs --list
 ---
 
 ## 版本历史
+
+### v0.5.6 — 2026-08-14
+
+- **修复“切换原生浅色界面无效 / 依旧全黑”**：根因并非主题 class 没切，而是 WorkBuddy 的表面令牌 `--wb-home-bg-primary` 由 **`html[data-theme]`** 驱动——打包 CSS 用 `[data-theme="dark"] .teams-container.is-mac`（特异性 `0,3,0`）锁定深色值 `#1f1f1f`，其特异性高于未加守卫的浅色规则 `.teams-container.is-mac`（特异性 `0,2,0`，值 `#f2f2f2`）。旧版 `applyMode` 只切换了 `light/vscode-light/cb-light` 等 **class** 与 `dataset.vscodeThemeKind/Name`，却**从没动过 `html.dataset.theme`**，导致 `<html>` 上残留的 `data-theme="dark"` 始终让深色规则胜出——视觉上就是切到“原生界面（浅色）”后侧栏/主区/顶栏仍死黑（上一次探测：`--wb-home-bg-primary` 计算值仍为 `#1f1f1f`，`teamsBg: rgb(31,31,31)`）。
+- **修复方式**：`applyMode(surface)` 现在除切 class 外，会**显式同步 `html.dataset.theme`**（浅色 surface → `'light'`、深色 surface → `'dark'`），让 `[data-theme="dark"]` 祖先匹配消失、未加守卫的浅色规则立即生效；并在 `originalState` / `restoreOriginalMode` 中保存与还原 `html.dataset.theme`，保证“还原原生/自定义图片”退出时不破坏 WorkBuddy 自身的主题记号。附带效果：自定义图片与主题也会按背景明暗正确设置 `data-theme`，文字/面板配色跟随切换。
+- **验证**：CDP 探针在切到原生浅色后实测 `htmlTheme=light`、`--wb-home-bg-primary=#f2f2f2`、`teamsBg/sidebarBg=rgb(242,242,242)`；浅→深→浅来回切换均正确，并在 0/3/6/12 秒连续采样中**稳定不回退**（之前偶发的 ~5s 回退正是 `data-theme="dark"` 与浅色 class 互相矛盾触发的不一致所致，根因消除后消失）。
 
 ### v0.5.5 — 2026-08-14
 
