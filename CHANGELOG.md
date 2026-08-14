@@ -108,7 +108,7 @@ node scripts/inject.mjs --list
   - 仍接受显式 rgba 或 `transparent`。
 - **`apply-skin.sh` / `restore.sh` 自动检测托管 Python**：优先使用 `/Users/cenacai/.workbuddy/binaries/python/versions/3.13.12/bin/python3`（已预装 Pillow），避免系统 `python3` 缺少依赖导致分析失败。
 - 更新 `README.md` / `SKILL.md` / `references/how-it-works.md` 说明新参数与行为。
-- 提交：`(待填写)`
+- 提交：`fc378f3`
 
 ### v0.3.0 — 2026-08-14
 
