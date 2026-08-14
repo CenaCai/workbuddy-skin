@@ -54,8 +54,22 @@ function parseArgs(argv) {
       case '--opacity': a.opacity = parseFloat(need('--opacity')); break;
       case '--card-bg': a.cardBg = need('--card-bg'); break;
       case '--auto-text': {
-        const v = need('--auto-text');
-        a.autoText = v.toLowerCase() === 'true' || v === '1' || v.toLowerCase() === 'yes' || v.toLowerCase() === 'on' || v.toLowerCase() === 'enable';
+        const raw = argv[i];
+        if (raw.includes('=')) {
+          const v = raw.split('=')[1].toLowerCase();
+          a.autoText = v === 'true' || v === '1' || v === 'yes' || v === 'on' || v === 'enable';
+        } else {
+          const next = argv[i + 1];
+          if (next && !next.startsWith('--')) {
+            const v = next.toLowerCase();
+            if (v === 'false' || v === '0' || v === 'no' || v === 'off' || v === 'disable') a.autoText = false;
+            else if (v === 'true' || v === '1' || v === 'yes' || v === 'on' || v === 'enable') a.autoText = true;
+            else { console.error(`--auto-text 参数值无效: ${next}`); process.exit(1); }
+            i++;
+          } else {
+            a.autoText = true;
+          }
+        }
         break;
       }
       case '--auto-text-threshold': a.autoTextThreshold = parseFloat(need('--auto-text-threshold')); break;
