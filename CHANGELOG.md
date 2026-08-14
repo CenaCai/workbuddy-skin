@@ -1,18 +1,24 @@
 # 更新日志 / Changelog
 
-本文件记录 **workbuddy-skin** 技能的演变过程。当前最新版本为 **v0.4.2**。
+本文件记录 **workbuddy-skin** 技能的演变过程。当前最新版本为 **v0.5.0**。
 
 ---
 
-## 当前设定总结（v0.4.0）
+## 当前设定总结（v0.5.0）
 
-一句话：**通过 Electron/Chromium 的 CDP 通道，在运行时把任意图片注入为 WorkBuddy 桌面端的整体背景，并自动给消息内容加底纹、让顶部状态栏与背景融为一体，全程零侵入（不修改 `app.asar`、二进制或签名）。**
+一句话：**通过 Electron/Chromium 的 CDP 通道，在运行时把任意图片注入为 WorkBuddy 桌面端的整体背景；用稳定 DOM 锚点 + WorkBuddy 原生 `--cb-*` 设计令牌做全局换色与透明化，并提供一个应用内 🎨 菜单随时切换背景或上传图片，全程零侵入（不修改 `app.asar`、二进制或签名）。**
 
 ### 机制
 
-- **零侵入注入**：WorkBuddy 基于 Electron（Chromium），其渲染进程支持 Chrome DevTools Protocol。脚本在 WorkBuddy 以 `--remote-debugging-port=9222` 启动后，通过 CDP WebSocket 注入一段 `<style id="__wb_skin_style__">` 与动态透明化逻辑，不触碰官方程序本体。
-- **动态透明化启发式**：不硬编码第三方皮肤的选择器，而是扫描 DOM，把面积占屏 ≥ 8% 且不交互（非 `BUTTON/A/INPUT/SELECT/TEXTAREA/IMG/SVG`）的容器背景透明化，让 `body` 背景图透出。这与 WorkBuddy 使用的 hash 化 CSS Module 类名（如 `_gridViewItem_1ens7_14`、`_mainArea_pf4c4_71`）兼容。
-- **还原性**：透明化前把原背景存入元素 `dataset`，`--restore` 时遍历还原并移除 style 标签。
+- **零侵入注入**：WorkBuddy 基于 Electron（Chromium），其渲染进程支持 Chrome DevTools Protocol。脚本在 WorkBuddy 以 `--remote-debugging-port=9222` 启动后，通过 CDP WebSocket 注入样式与菜单脚本，不触碰官方程序本体。
+- **稳定 DOM 锚点（v0.5.0 新架构）**：
+  - 壁纸挂在 `#root`（全屏根节点）。
+  - `.teams-container` 与 `[data-view-id]`（`sidebar` / `main-content` / `detail-panel` / `sources-panel`）透明化，让壁纸在各面板后透出。
+  - 这些锚点不是 CSS-module 哈希类名，跨版本稳定；不再依赖 v0.4.x 的“扫描 `body *` + 面积阈值 ≥ 8%”启发式。
+- **原生 `--cb-*` 设计令牌覆盖（v0.5.0）**：WorkBuddy 自身使用 `--cb-text-primary`、`--cb-bg-primary` 等 token。通过 `!important` 覆写这些 token，可全局切换文字色并压过 app 自带的 `!important` 黑字规则；同时把背景 token 设为 `transparent`，让 `#root` 壁纸显示。这取代了 v0.4.x 复杂的“逐个元素内联强制”兜底逻辑。
+- **磨砂玻璃面板**：侧边栏、主内容区底部、详情面板使用 `color-mix()` + `backdrop-filter: blur(...)`，在透出背景图的同时保证文字可读。
+- **应用内 🎨 菜单**：注入成功后，WorkBuddy 右上角出现菜单按钮，可切换当前背景 / 内置预设、上传本地图片（Canvas 自动取色）、一键还原原生界面。
+- **还原性**：`--restore` 移除新样式标签（`wb-skin-studio-style` / `wb-skin-studio-menu`），并清理旧版 v0.4.x 残留（`__wb_skin_style__` 与内联 `dataset` 标记）。
 - **零依赖**：`inject.mjs` 仅用 Node 22 内置的 `WebSocket` / `fetch`，无需 `npm install`。
 
 ### 目录结构
@@ -26,12 +32,15 @@ workbuddy-skin/
 ├── .gitignore
 ├── references/how-it-works.md    # 底层机制、真机 DOM 类名表、透明化启发式、踩坑
 └── scripts/
-    ├── inject.mjs                # 零依赖 CDP 注入器（核心）
+    ├── inject.mjs                # 零依赖 CDP 注入器（核心编排）
     ├── analyze-bg.py             # Python 背景亮度分析器（Pillow）
     ├── apply-skin.sh             # 一键：退出 → 带调试端口重启 → 注入
     ├── restore.sh                # 运行时还原
     ├── start-debug.sh            # 仅带端口重启（DOM 调试）
-    └── background.png            # 内置占位壁纸（深紫蓝渐变）
+    ├── background.png            # 内置占位壁纸（深紫蓝渐变）
+    └── src/
+        ├── skin-css.mjs          # CSS 生成器（锚点 + token + 磨砂玻璃）
+        └── skin-menu.mjs         # 应用内 🎨 菜单脚本生成器
 ```
 
 ### 核心参数（`inject.mjs`）
@@ -39,12 +48,13 @@ workbuddy-skin/
 | 参数 | 默认值 | 说明 |
 | --- | --- | --- |
 | `--port` | `9222` | CDP 调试端口 |
-| `--image <path>` | — | 背景图片路径（建议 16:9）；不指定则注入纯色渐变 |
-| `--css <path>` | — | 自定义 CSS 主题（替代默认背景规则） |
+| `--image <path>` | — | 背景图片路径（建议 16:9）；不指定则注入内置渐变 |
+| `--css <path>` | — | 自定义 CSS 文件路径（替代默认背景样式，并跳过菜单） |
 | `--opacity <f>` | `0.45` | 背景遮罩不透明度（浅色图用 `0.03`~`0.05`，深色图用 `0.1`~`0.3`） |
 | `--card-bg <rgba\|auto\|transparent>` | `auto` | 消息/回复内容底纹；`auto` 随背景明暗自动切换，传 `transparent` 可禁用 |
 | `--auto-text [true\|false]` | `true` | 根据背景明暗自动调整文字颜色 |
 | `--auto-text-threshold <n>` | `128` | 自动文字颜色亮度阈值（0~255） |
+| `--no-menu` | — | 仅注入背景，不加载应用内 🎨 菜单 |
 | `--restore` | — | 还原官方外观 |
 | `--list` | — | 查看当前注入状态 |
 | `--verbose` | — | 输出注入细节 |
@@ -52,22 +62,22 @@ workbuddy-skin/
 
 ### 自动生效的四件事
 
-1. **整体背景**：`body` 铺满背景图 + 暗/亮遮罩（`--opacity` 控制）。
-2. **背景亮度分析**：`scripts/analyze-bg.py` 采样壁纸左 60% 区域，按感知亮度公式判断 `dark`/`light`。
-3. **消息底纹与自适应文字**：根据分析结果自动切换——
-   - 浅色背景 → 黑色文字 + 浅色消息底纹（`rgba(245,245,245,0.92)`）
-   - 深色背景 → 白色文字 + 深色消息底纹（`rgba(40,40,48,0.90)`）
-   - 代码块容器单独用半透明深色，避免破坏语法高亮。
-4. **顶部状态栏融合**：显式强制 `.workbuddy-topbar`（及 `--mac`/`--scrolled`/`--primary` 变体）透明并加 `backdrop-filter: blur(4px)`，使任务名/搜索/分享/历史提问/展开右栏那一块与壁纸连成整体。
+1. **整体背景**：`#root` 铺满背景图 + 暗/亮遮罩（`--opacity` 控制）。
+2. **背景亮度分析**：`scripts/analyze-bg.py` 采样壁纸，按感知亮度公式判断 `dark`/`light`；菜单上传图片时改由页内 Canvas 取色。
+3. **全局文字与面板配色**：覆写 `--cb-text-primary/secondary/disabled/link`、`--cb-vscode-foreground` 等 token，自动切换深浅文字；`--cb-bg-*` 设为透明让壁纸透出。
+4. **磨砂玻璃与消息底纹**：侧边栏 / 主内容区 / 详情面板加半透明磨砂背景；`.cb-markdown` 与用户消息气泡加圆角底纹，代码块容器单独保护语法高亮。
 
 ### 日常使用命令
 
 ```bash
-# 换壁纸（调试端口已在线时无需重启）
-node scripts/inject.mjs --port 9222 --image /path/to/bg.png --opacity 0.03
+# 换壁纸（调试端口已在线时无需重启），默认带 🎨 菜单
+node scripts/inject.mjs --port 9222 --image /path/to/bg.png --opacity 0.45
+
+# 不需要应用内菜单
+node scripts/inject.mjs --image /path/to/bg.png --no-menu
 
 # 一键重启并注入（首次或端口未开时用）
-./scripts/apply-skin.sh --image /path/to/bg.png --opacity 0.03
+./scripts/apply-skin.sh --image /path/to/bg.png --opacity 0.45
 
 # 还原官方外观
 node scripts/inject.mjs --restore
@@ -86,13 +96,23 @@ node scripts/inject.mjs --list
 
 - **仅 macOS 可用**：`apply-skin.sh` 用 `osascript` 退出、`nohup` 重启 Electron，依赖 macOS。
 - **系统标题栏改不了**：最顶部带红/黄/绿三个按钮的窄条是 macOS 窗口装饰，在 Chromium 渲染层之外，任何注入方案都无法修改。
-- **第三方 Codex / HeiGe 皮肤不可直接用**：它们依赖 `:root[data-codex-window-type="electron"]` 与 `--color-background-surface` 等 Codex 专属选择器/变量，在 WorkBuddy 上取值为空、规则不生效，需重写选择器。
 - **跨重启保留**：当前靠每次启动时 `apply-skin.sh` 重新注入；若需“永久常驻”，需额外用 `launchd` plist 拉起带调试端口的 WorkBuddy 并自动注入（比现在更重）。
 - **重新生成消耗 credits**：ImageGen 每次约 5–10 credits，且结果带 unavoidable 的“AI生成”角标。
 
 ---
 
 ## 版本历史
+
+### v0.5.0 — 2026-08-14
+
+- **架构升级：稳定锚点 + `--cb-*` 设计令牌（融合 cdredfox/workbuddy-skin-studio）**：
+  -  wallpaper 挂到 `#root`，面板透明化改用 `.teams-container` 与 `[data-view-id]`（`sidebar` / `main-content` / `detail-panel` / `sources-panel`），彻底替换 v0.4.x 的“扫描 `body *` + 面积阈值 ≥ 8%”启发式。
+  -  用 `!important` 覆写 WorkBuddy 原生 `--cb-text-primary/secondary/disabled/link`、`--cb-vscode-foreground`、`--cb-bg-primary/secondary`、`--cb-panel-bg-primary` 等 token，全局切换文字色并压过 app 自带的 `!important` 黑字规则；背景 token 设为 `transparent` 让壁纸透出。这解决了 v0.4.2 需要“内联 JS 强制兜底”的根源问题。
+  -  面板使用 `color-mix()` + `backdrop-filter: blur(...)` 磨砂玻璃，兼顾背景图透出与文字可读。
+- **新增应用内 🎨 菜单**：注入后 WorkBuddy 右上角出现菜单按钮，可切换当前背景 / 内置预设、上传本地图片（页内 Canvas 自动取色）、一键还原原生界面。
+- **新增 `--no-menu` 参数**：CLI 换图时可选择不加载应用内菜单。
+- **代码结构模块化**：新增 `scripts/src/skin-css.mjs` 与 `scripts/src/skin-menu.mjs`，CSS 模板与菜单脚本同源生成，避免两套逻辑漂移。
+- **向后兼容**：保留全部旧 CLI 参数；`--restore` 同时清理新版 `wb-skin-studio-style` / `wb-skin-studio-menu` 与旧版 `__wb_skin_style__` 残留。
 
 ### v0.4.2 — 2026-08-14
 

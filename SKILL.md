@@ -21,8 +21,10 @@ Apply a custom background image, wallpaper, or full CSS theme to the **WorkBuddy
 
 - WorkBuddy is an Electron 37 + Chromium 138 app. CDP injection requires the renderer launched with `--remote-debugging-port=<PORT>`. This flag is **only settable at launch**, so the *first* injection requires restarting WorkBuddy with the port open.
 - Once started with the port, the port stays online and the agent session recovers, so **subsequent image swaps need NO restart** — just re-run `inject.mjs --image <img>`.
-- Injection dynamically locates large opaque DOM containers, saves their original background to a `dataset` attribute, and transparentizes them; then sets a body background image plus an optional dark overlay (`--opacity`).
-- A Python helper (`analyze-bg.py`) samples the left/center region of the wallpaper and classifies it as `dark` or `light`; `inject.mjs` then auto-selects white/black text colors and light/dark message card backgrounds (`--card-bg auto`).
+- v0.5.0 anchors on stable DOM selectors (`#root`, `.teams-container`, `[data-view-id]`) instead of scanning the whole DOM. The wallpaper is attached to `#root`; panels are transparentized via `--cb-bg-*` token overrides so the wallpaper shows through.
+- WorkBuddy's native `--cb-*` design tokens (`--cb-text-primary`, `--cb-bg-primary`, etc.) are overridden with `!important` to switch global text color and transparentize backgrounds. This replaces the v0.4.x inline-style fallback.
+- Frosted-glass panels use `color-mix()` + `backdrop-filter: blur(...)` for readability while preserving the wallpaper feel.
+- A Python helper (`analyze-bg.py`) samples the wallpaper and classifies it as `dark` or `light`; `inject.mjs` then auto-selects text and card colors. The in-app 🎨 menu uses page-side Canvas palette extraction for uploaded images.
 - The macOS system title bar (traffic-light row) is OS window chrome, **outside** the render layer — cannot be themed by any injection approach.
 
 ## Usage
@@ -59,7 +61,9 @@ cd ~/.workbuddy/skills/workbuddy-skin/scripts
 
 ## Scripts (in `scripts/`)
 
-- `inject.mjs` — zero-dependency CDP injector (Node 22 built-in WebSocket/fetch). Flags: `--port`, `--image`, `--css`, `--opacity` (default 0.45), `--card-bg` (default `auto`; also accepts `transparent` or an explicit rgba), `--auto-text` (default `true`), `--auto-text-threshold` (default 128), `--restore`, `--list`, `--target`, `--verbose`, `--help`.
+- `inject.mjs` — zero-dependency CDP injector (Node 22 built-in WebSocket/fetch). Flags: `--port`, `--image`, `--css`, `--opacity` (default 0.45), `--card-bg` (default `auto`; also accepts `transparent` or an explicit rgba), `--auto-text` (default `true`), `--auto-text-threshold` (default 128), `--no-menu`, `--restore`, `--list`, `--target`, `--verbose`, `--help`.
+- `src/skin-css.mjs` — CSS generator: stable anchors + `--cb-*` token overrides + frosted glass.
+- `src/skin-menu.mjs` — In-app 🎨 menu script generator: switch backgrounds, upload images with auto palette extraction, restore.
 - `analyze-bg.py` — Python helper used by `inject.mjs` to classify wallpaper brightness and pick text/card colors (requires Pillow).
 - `apply-skin.sh` — quit → relaunch with port → inject (one-shot; restarts the app).
 - `restore.sh` — runtime restore of injected styles.
@@ -76,7 +80,7 @@ cd ~/.workbuddy/skills/workbuddy-skin/scripts
 - **Example image paths** in docs (e.g. `~/Pictures/wallpaper.jpg`) are placeholders; the script defaults to the bundled `background.png` when no `--image`/`--css` is given.
 - **macOS-only:** scripts assume `/Applications/WorkBuddy.app` and `osascript`/`curl`. Not portable to Windows (where HeiGe-style `.bat`/`apply.ps1` installers live).
 
-## Adapting third-party skins (Codex / HeiGe)
+## Adapting third-party skins (Codex / HeiGe / cdredfox)
 
 Themes built for Codex/CodeBuddy (e.g. `HeiGeAi/heige-codex-skin-studio`, the `djiDJI130/workbuddy-mono-skin` rebrand) are **NOT directly usable** on WorkBuddy:
 
@@ -84,7 +88,13 @@ Themes built for Codex/CodeBuddy (e.g. `HeiGeAi/heige-codex-skin-studio`, the `d
 - They override Codex CSS variables (`--color-background-surface`, `--color-background-panel`, `--color-text-foreground`, …) that WorkBuddy does not use (the computed value is empty).
 - Only the `#root { background: … }` portion partially applies; the rest does nothing.
 
-The only portable part is the CDP injection concept. To port a theme, rewrite its selectors against WorkBuddy's hashified CSS-Module class names (e.g. `teams-container.is-mac`, `_gridViewItem_1ens7_14`, `_mainArea_pf4c4_71`, `conversation-list`, `_content_pf4c4_7`, `_userMessageBubble_1kyit_8`, `PRE.cb-markdown-pre`) and WorkBuddy's own variable system, then inject via `inject.mjs --css`.
+`cdredfox/workbuddy-skin-studio` is specifically built for WorkBuddy and **is compatible in concept**. v0.5.0 intentionally fuses its good parts:
+
+- Stable DOM anchors (`#root`, `.teams-container`, `[data-view-id]`) and `--cb-*` token overrides for global theming.
+- In-app 🎨 menu with background switching, custom image upload, and Canvas palette extraction.
+- Modular `src/` structure with shared CSS templates.
+
+We deliberately do **not** copy its 9223 port default, Windows scripts, anime-themed assets, or `theme.json` catalog; this skill keeps the single-image CLI model and macOS-focused shell helpers.
 
 ## References
 

@@ -2,9 +2,9 @@
 
 给 **WorkBuddy 桌面端（macOS）** 换背景图 / 壁纸 / 主题的零侵入方案。基于 Chrome DevTools Protocol（CDP）在运行时注入样式，不修改 `app.asar`、不碰签名、不篡改二进制。
 
-> 原理与 [Fei-Away/Codex-Dream-Skin](https://github.com/Fei-Away/Codex-Dream-Skin) 同源（WorkBuddy 与 Codex 同为 Electron/Chromium），但 WorkBuddy 的 DOM 与 Codex 不同，因此本方案用**动态透明化启发式**自适应真实界面，而非硬编码部件选择器。
+> v0.5.0 融合 [cdredfox/workbuddy-skin-studio](https://github.com/cdredfox/workbuddy-skin-studio) 的核心思路：用 WorkBuddy 稳定 DOM 锚点（`#root` / `.teams-container` / `[data-view-id]`）与原生 `--cb-*` 设计令牌做全局换色，取代 v0.4.x 的“面积阈值扫描 + 逐个元素内联强制”兜底；同时加入应用内 🎨 菜单，可随时切换背景、上传自定义图片（自动取色）、一键还原。
 
-📌 **当前版本 v0.4.2** · 完整设定总结与版本历史见 [CHANGELOG.md](./CHANGELOG.md)。
+📌 **当前版本 v0.5.0** · 完整设定总结与版本历史见 [CHANGELOG.md](./CHANGELOG.md)。
 
 ---
 
@@ -77,18 +77,34 @@ node inject.mjs --image /path/to/新图.png --opacity 0.03
 # 或者直接退出 WorkBuddy 用普通方式重开，注入自动消失
 ```
 
+### 4. 应用内 🎨 菜单（v0.5.0）
+
+注入成功后，WorkBuddy **右上角会出现一个 🎨 按钮**，无需再开终端即可：
+
+- 在当前背景与内置预设之间切换。
+- 上传本地图片，菜单会 Canvas 采样自动提取主色并生成配套配色。
+- 点击“还原原生界面”立即移除所有注入样式。
+
+如果只想用 CLI 换图、不需要菜单，加 `--no-menu`：
+
+```bash
+node inject.mjs --image /path/to/bg.png --no-menu
+```
+
 ---
 
 ## 文件说明
 
 | 文件 | 作用 |
 |------|------|
-| `scripts/inject.mjs` | 零依赖 CDP 注入器（Node 22 内置 WebSocket/fetch）。支持 `--port`/`--image`/`--css`/`--opacity`/`--card-bg`/`--auto-text`/`--auto-text-threshold`/`--restore`/`--list`/`--verbose`/`--help` |
+| `scripts/inject.mjs` | 零依赖 CDP 注入器（Node 22 内置 WebSocket/fetch）。支持 `--port`/`--image`/`--css`/`--opacity`/`--card-bg`/`--auto-text`/`--auto-text-threshold`/`--no-menu`/`--restore`/`--list`/`--verbose`/`--help` |
 | `scripts/analyze-bg.py` | Python 辅助：分析背景图亮度，输出 `dark`/`light` 及推荐文字颜色/遮罩（需 Pillow） |
 | `scripts/apply-skin.sh` | 一键：退出 → 带调试端口重启 → 注入（自动检测托管 Python） |
 | `scripts/restore.sh` | 运行时还原注入样式 |
 | `scripts/start-debug.sh` | 仅带端口重启（不注入），供 Chrome `chrome://inspect` 观察 DOM |
 | `scripts/background.png` | 内置默认占位壁纸 |
+| `scripts/src/skin-css.mjs` | CSS 生成器：稳定锚点 + `--cb-*` token 覆盖 + 磨砂玻璃 |
+| `scripts/src/skin-menu.mjs` | 应用内 🎨 菜单脚本生成器：切换背景、上传图片、自动取色、还原 |
 | `references/how-it-works.md` | 底层机制、DOM 选择器、透明化启发式、踩坑记录 |
 
 ---

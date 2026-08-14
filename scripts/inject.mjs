@@ -2,36 +2,47 @@
 /**
  * WorkBuddy 界面背景注入脚本（基于 Chrome DevTools Protocol / CDP）
  *
- * 原理：WorkBuddy 桌面端是 Electron(Chromium) 应用。以调试端口启动后，
- * 通过本机 127.0.0.1 的 CDP 协议向 renderer 进程运行时注入 CSS + 背景图，
- * 不改官方二进制、不碰签名、不动安装目录。
+ * v0.5.0：融合 cdredfox/workbuddy-skin-studio 的“稳定锚点 + --cb-* 设计令牌 +
+ * 应用内 🎨 菜单”思路。背景透明化不再依赖“扫描 body * + 面积阈值”的脆弱启发式，
+ * 而是锚定 #root / .teams-container / [data-view-id] 等稳定选择器，并用 --cb-text-*
+ * 令牌全局换文字色；同时注入一个 🎨 菜单，可随时切换背景、上传自定义图片（自动取色）。
  *
  * 用法：
- *   node inject.mjs --image /path/to/bg.png            # 注入背景图
- *   node inject.mjs --image bg.png --opacity 0.6       # 自定义遮罩不透明度
- *   node inject.mjs --css my-theme.css                 # 使用自定义 CSS（可选）
+ *   node inject.mjs --image /path/to/bg.png            # 注入背景图 + 🎨 菜单
+ *   node inject.mjs --image bg.png --opacity 0.4       # 自定义遮罩不透明度
+ *   node inject.mjs --image bg.png --no-menu           # 仅注入背景，不加载菜单
+ *   node inject.mjs --css my-theme.css                 # 使用自定义 CSS（跳过菜单）
  *   node inject.mjs --restore                          # 恢复官方外观
  *   node inject.mjs --list                             # 仅列出可注入的 target
- *   node inject.mjs --target 0 --image bg.png          # 注入指定 target
  *
  * 依赖：Node 22+（内置 WebSocket / fetch，无需 npm install）
  */
 import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { resolve, extname, dirname } from 'node:path';
+import { resolve, extname, dirname, basename } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+
+import {
+  buildSkinCss,
+  buildSkinCssTemplate,
+  paletteFromLuminance,
+  STYLE_ID,
+  MENU_ID,
+} from './src/skin-css.mjs';
+import { buildSkinMenuScript } from './src/skin-menu.mjs';
 
 const HELP = `用法: node inject.mjs [选项]
 
   --port <n>      调试端口（默认 9222）
-  --image <path>  背景图片路径（png/jpg/jpeg/webp/gif）
-  --css <path>    自定义 CSS 文件路径（覆盖内置背景样式）
+  --image <path>  背景图片路径（png/jpg/jpeg/webp/gif/avif/bmp）
+  --css <path>    自定义 CSS 文件路径（覆盖内置背景样式，并跳过菜单）
   --opacity <f>   背景遮罩不透明度 0~1（默认 0.45，越大越暗）
-  --card-bg <rgba|auto|transparent> 消息底纹（默认 auto：随背景明暗自动切换；transparent 禁用）
+  --card-bg <rgba|auto|transparent> 消息底纹（默认 auto：随背景明暗自动）
   --auto-text [true|false] 根据背景明暗自动调整文字颜色（默认 true）
   --auto-text-threshold <n> 自动文字颜色阈值 0~255（默认 128）
-  --restore       恢复官方外观（移除注入）
+  --no-menu       仅注入背景，不加载 🎨 菜单
+  --restore       恢复官方外观（移除注入与菜单）
   --list          仅列出可注入的页面 target，不注入
   --target <i>    指定 target 下标（配合 --list 结果使用）
   --verbose       打印侦察到的 DOM 结构详情
@@ -39,7 +50,10 @@ const HELP = `用法: node inject.mjs [选项]
 `;
 
 function parseArgs(argv) {
-  const a = { port: 9222, opacity: 0.45, cardBg: 'auto', autoText: true, autoTextThreshold: 128, restore: false, list: false, verbose: false };
+  const a = {
+    port: 9222, opacity: 0.45, cardBg: 'auto', autoText: true, autoTextThreshold: 128,
+    restore: false, list: false, verbose: false, noMenu: false,
+  };
   let i = 2;
   const need = (flag) => {
     const v = argv[++i];
@@ -47,39 +61,36 @@ function parseArgs(argv) {
     return v;
   };
   while (i < argv.length) {
-    switch (argv[i]) {
-      case '--port': a.port = parseInt(need('--port'), 10); break;
-      case '--image': a.image = need('--image'); break;
-      case '--css': a.css = need('--css'); break;
-      case '--opacity': a.opacity = parseFloat(need('--opacity')); break;
-      case '--card-bg': a.cardBg = need('--card-bg'); break;
-      case '--auto-text': {
-        const raw = argv[i];
-        if (raw.includes('=')) {
-          const v = raw.split('=')[1].toLowerCase();
-          a.autoText = v === 'true' || v === '1' || v === 'yes' || v === 'on' || v === 'enable';
-        } else {
-          const next = argv[i + 1];
-          if (next && !next.startsWith('--')) {
-            const v = next.toLowerCase();
-            if (v === 'false' || v === '0' || v === 'no' || v === 'off' || v === 'disable') a.autoText = false;
-            else if (v === 'true' || v === '1' || v === 'yes' || v === 'on' || v === 'enable') a.autoText = true;
-            else { console.error(`--auto-text 参数值无效: ${next}`); process.exit(1); }
-            i++;
-          } else {
-            a.autoText = true;
-          }
-        }
-        break;
+    const arg = argv[i];
+    if (arg === '--port') a.port = parseInt(need('--port'), 10);
+    else if (arg === '--image') a.image = need('--image');
+    else if (arg === '--css') a.css = need('--css');
+    else if (arg === '--opacity') a.opacity = parseFloat(need('--opacity'));
+    else if (arg === '--card-bg') a.cardBg = need('--card-bg');
+    else if (arg === '--auto-text') {
+      const raw = arg;
+      if (raw.includes('=')) {
+        const v = raw.split('=')[1].toLowerCase();
+        a.autoText = v === 'true' || v === '1' || v === 'yes' || v === 'on' || v === 'enable';
+      } else {
+        const next = argv[i + 1];
+        if (next && !next.startsWith('--')) {
+          const v = next.toLowerCase();
+          if (v === 'false' || v === '0' || v === 'no' || v === 'off' || v === 'disable') a.autoText = false;
+          else if (v === 'true' || v === '1' || v === 'yes' || v === 'on' || v === 'enable') a.autoText = true;
+          else { console.error(`--auto-text 参数值无效: ${next}`); process.exit(1); }
+          i++;
+        } else a.autoText = true;
       }
-      case '--auto-text-threshold': a.autoTextThreshold = parseFloat(need('--auto-text-threshold')); break;
-      case '--restore': a.restore = true; break;
-      case '--list': a.list = true; break;
-      case '--target': a.target = parseInt(need('--target'), 10); break;
-      case '--verbose': a.verbose = true; break;
-      case '--help': a.help = true; break;
-      default: console.error(`未知参数: ${argv[i]}`); console.error(HELP); process.exit(1);
     }
+    else if (arg === '--auto-text-threshold') a.autoTextThreshold = parseFloat(need('--auto-text-threshold'));
+    else if (arg === '--no-menu') a.noMenu = true;
+    else if (arg === '--restore') a.restore = true;
+    else if (arg === '--list') a.list = true;
+    else if (arg === '--target') a.target = parseInt(need('--target'), 10);
+    else if (arg === '--verbose') a.verbose = true;
+    else if (arg === '--help') a.help = true;
+    else { console.error(`未知参数: ${arg}`); console.error(HELP); process.exit(1); }
     i++;
   }
   return a;
@@ -105,7 +116,7 @@ class CDP {
       const ws = new WebSocket(url);
       const t = setTimeout(() => reject(new Error('CDP WebSocket 连接超时')), 10000);
       ws.onopen = () => { clearTimeout(t); resolve(new CDP(ws)); };
-      ws.onerror = (e) => { clearTimeout(t); reject(new Error('CDP WebSocket 连接失败')); };
+      ws.onerror = () => { clearTimeout(t); reject(new Error('CDP WebSocket 连接失败')); };
     });
   }
   send(method, params = {}) {
@@ -134,7 +145,7 @@ async function imageToDataUrl(path) {
   return `data:${mime};base64,${buf.toString('base64')}`;
 }
 
-/** 调用 Python 分析背景图明暗 */
+/** 调用 Python 分析背景图明暗（仅 CLI 模式用于决定明暗；菜单走页内取色） */
 function analyzeBackground(imagePath, threshold) {
   const analyzer = resolve(SCRIPT_DIR, 'analyze-bg.py');
   if (!existsSync(analyzer)) return null;
@@ -143,251 +154,46 @@ function analyzeBackground(imagePath, threshold) {
     const out = execFileSync(python, [analyzer, resolve(imagePath), String(threshold)], { encoding: 'utf8', timeout: 15000 });
     return JSON.parse(out);
   } catch (e) {
-    console.warn(`  ⚠ 背景亮度分析失败：${e.message}，将跳过自动文字颜色`);
+    console.warn(`  ⚠ 背景亮度分析失败：${e.message}，将按深色处理`);
     return null;
   }
 }
 
-/** 根据背景明暗生成文字颜色覆盖规则 */
-function buildTextRules({ textColor, secondaryTextColor, textShadow }) {
-  return `
-/* 根据背景明暗自动调整文字颜色（输入框、任务栏、侧边栏、消息内容等） */
-:root {
-  --wb-auto-text: ${textColor};
-  --wb-auto-text-secondary: ${secondaryTextColor};
-  --wb-text-shadow: ${textShadow};
+/** 仅注入样式（无菜单模式） */
+function buildStyleOnlyScript(css) {
+  return `(function(){
+    var STYLE_ID = ${JSON.stringify(STYLE_ID)};
+    var o = document.getElementById('__wb_skin_style__'); if (o) o.remove(); /* 清理旧版 v0.4.x 样式 */
+    var old = document.getElementById(STYLE_ID); if (old) old.remove();
+    var style = document.createElement('style');
+    style.id = STYLE_ID;
+    style.textContent = ${JSON.stringify(css)};
+    (document.head || document.documentElement).appendChild(style);
+    return { applied: true };
+  })()`;
 }
 
-/* 顶部状态栏文字 */
-.workbuddy-topbar,
-.workbuddy-topbar *,
-.workbuddy-topbar--mac,
-.workbuddy-topbar--mac *,
-.workbuddy-topbar--scrolled,
-.workbuddy-topbar--scrolled *,
-.workbuddy-topbar--primary,
-.workbuddy-topbar--primary * {
-  color: var(--wb-auto-text) !important;
-  text-shadow: 0 1px 2px var(--wb-text-shadow) !important;
-}
-
-/* 侧边栏/目录列表文字 */
-[class*="conversationList"],
-[class*="conversationList"] *,
-[class*="gridViewItem"],
-[class*="gridViewItem"] *,
-[class*="sidebar"],
-[class*="sidebar"] * {
-  color: var(--wb-auto-text) !important;
-  text-shadow: 0 1px 2px var(--wb-text-shadow) !important;
-}
-
-/* AI 回复与用户消息文字 */
-.cb-markdown,
-.cb-markdown p, .cb-markdown h1, .cb-markdown h2, .cb-markdown h3,
-.cb-markdown h4, .cb-markdown h5, .cb-markdown h6, .cb-markdown li,
-.cb-markdown ul, .cb-markdown ol, .cb-markdown blockquote,
-.cb-markdown span, .cb-markdown div:not(.cb-markdown-pre-container):not(.cb-markdown-pre-wrapper),
-.cb-markdown strong, .cb-markdown em,
-[class*="userMessageBubble"],
-[class*="userMessageBubble"] * {
-  color: var(--wb-auto-text) !important;
-  text-shadow: 0 1px 2px var(--wb-text-shadow) !important;
-}
-
-/* 输入框（textarea / contenteditable / input） */
-input, textarea, [contenteditable], [contenteditable] *,
-[role="textbox"], [role="textbox"] * {
-  color: var(--wb-auto-text) !important;
-  text-shadow: 0 1px 2px var(--wb-text-shadow) !important;
-}
-input::placeholder, textarea::placeholder, [contenteditable]:empty::before {
-  color: var(--wb-auto-text-secondary) !important;
-}
-
-/* 保护代码块语法高亮：不覆盖 pre/code 内的颜色 */
-.cb-markdown pre, .cb-markdown pre *,
-.cb-markdown code, .cb-markdown code *,
-.cb-markdown-pre-container, .cb-markdown-pre-container *,
-.cb-markdown-pre-wrapper, .cb-markdown-pre-wrapper * {
-  color: inherit !important;
-  text-shadow: none !important;
-}
-`;
-}
-
-/** 默认背景 CSS：铺满 + 暗色遮罩保证文字可读 */
-function buildDefaultCss(dataUrl, opacity, cardBg, textInfo) {
-  const overlay = `rgba(10,12,16,${opacity})`;
-  const bgImage = dataUrl
-    ? `linear-gradient(${overlay}, ${overlay}), url("${dataUrl}")`
-    : `linear-gradient(135deg, #14161c 0%, #1d2230 50%, #2a2138 100%)`;
-  const cardRules = cardBg && cardBg !== 'transparent'
-    ? `
-/* 消息/回复内容底纹：保证文字在复杂背景图上可读 */
-[class*="userMessageBubble"],
-.cb-markdown,
-.cb-markdown-pre-wrapper {
-  background-color: ${cardBg} !important;
-  border-radius: 12px !important;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.08) !important;
-}
-.cb-markdown {
-  padding: 12px 16px !important;
-}
-[class*="userMessageBubble"] {
-  padding: 10px 14px !important;
-}
-/* 代码块保持独立背景，不强制变浅 */
-.cb-markdown-pre-container {
-  background-color: rgba(30,30,35,0.85) !important;
-  border-radius: 8px !important;
-}
-`
-    : '';
-  // 顶部状态栏（任务名/搜索/分享/历史提问/展开右栏）：它本身是窄高元素，
-  // 面积占比低于透明化启发式阈值会被漏掉，这里显式强制透明，让它和壁纸融为一体。
-  // 同时加 backdrop-filter 防止滚动时聊天内容从顶栏透出。
-  const topbarRules = `
-/* 顶部状态栏：透明化 + 轻磨砂，和壁纸整体融合 */
-.workbuddy-topbar,
-.workbuddy-topbar--mac,
-.workbuddy-topbar--scrolled,
-.workbuddy-topbar--primary {
-  background-color: transparent !important;
-  background-image: none !important;
-  border-bottom: none !important;
-  box-shadow: none !important;
-  backdrop-filter: blur(4px) !important;
-  -webkit-backdrop-filter: blur(4px) !important;
-}
-`;
-  // 左侧聊天/任务栏（conversation-sidebar）：动态透明化 JS 会把它设成
-  // 内联 background-color:transparent 让壁纸透出，但在复杂/深色壁纸上白字
-  // 会糊。这里用 !important 压过内联透明，加半透明深色底 + 磨砂，压暗背景、
-  // 让侧栏文字清晰。遮罩不宜过深（会吃掉背景、且 app 侧置顶项黑字在深底上
-  // 几乎不可见），故保持在 0.60 左右并只做轻磨砂。
-  const sidebarRules = `
-/* 左侧侧边栏：磨砂半透明深色底，保证文字在复杂壁纸上可读 */
-.conversation-sidebar {
-  background-color: rgba(22,24,32,0.60) !important;
-  background-image: none !important;
-  backdrop-filter: blur(8px) !important;
-  -webkit-backdrop-filter: blur(8px) !important;
-  border-right: 1px solid rgba(255,255,255,0.06) !important;
-}
-`;
-  const textRules = textInfo ? buildTextRules(textInfo) : '';
-  return `
-html { background: transparent !important; }
-body {
-  background-color: transparent !important;
-  background-image: ${bgImage} !important;
-  background-size: cover !important;
-  background-position: center !important;
-  background-attachment: fixed !important;
-  background-repeat: no-repeat !important;
-}
-${topbarRules}
-${sidebarRules}
-${cardRules}
-${textRules}
-`;
-}
-
-/** 注入后执行的 JS：动态透明化“遮挡背景的大容器”，让 body 背景透出 */
-function buildInjectJs(css, textInfo) {
-  return `(function () {
-  var STYLE_ID = '__wb_skin_style__';
-  var old = document.getElementById(STYLE_ID);
-  if (old) old.remove();
-
-  var style = document.createElement('style');
-  style.id = STYLE_ID;
-  style.textContent = ${JSON.stringify(css)};
-  (document.head || document.documentElement).appendChild(style);
-
-  // 动态透明化：找到面积大、有非透明背景、且位于较外层的容器，使其背景透明
-  var vw = window.innerWidth || document.documentElement.clientWidth;
-  var vh = window.innerHeight || document.documentElement.clientHeight;
-  var area = vw * vh;
-  var found = [];
-  var all = document.querySelectorAll('body *');
-  var INTERACTIVE = { BUTTON:1, A:1, INPUT:1, SELECT:1, TEXTAREA:1, IMG:1, SVG:1 };
-  for (var i = 0; i < all.length; i++) {
-    var el = all[i];
-    if (el === document.body) continue;
-    if (INTERACTIVE[el.tagName]) continue; // 保护按钮/链接/输入框等交互元素
-    var r = el.getBoundingClientRect();
-    if (r.width * r.height < area * 0.08) continue; // 放宽阈值，让侧边栏/顶栏也透明化
-    var cs = window.getComputedStyle(el);
-    var bgc = cs.backgroundColor;
-    var bgi = cs.backgroundImage;
-    var opaque = bgc && bgc !== 'transparent' && bgc !== 'rgba(0, 0, 0, 0)';
-    var hasImg = bgi && bgi !== 'none';
-    if (!opaque && !hasImg) continue;
-    // 计算 DOM 深度
-    var depth = 0, p = el; while (p && p !== document.body) { depth++; p = p.parentElement; }
-    found.push({ tag: el.tagName, cls: (el.className && typeof el.className === 'string') ? el.className.slice(0, 120) : '', id: el.id || '', depth: depth, w: Math.round(r.width), h: Math.round(r.height), bgc: bgc });
+const RESTORE_JS = `(function(){
+  var STYLE_ID = ${JSON.stringify(STYLE_ID)};
+  var MENU_ID = ${JSON.stringify(MENU_ID)};
+  var o = document.getElementById('__wb_skin_style__'); if (o) o.remove(); /* 旧版 v0.4.x */
+  var s = document.getElementById(STYLE_ID); if (s) s.remove();
+  var m = document.getElementById(MENU_ID); if (m) m.remove();
+  delete document.documentElement.dataset.wbSkin;
+  // 清理旧版本（v0.4.x）可能残留的内联样式
+  var legacy = document.querySelectorAll('[data-wb-skin-orig-bg],[data-wb-skin-text]');
+  for (var i = 0; i < legacy.length; i++) {
+    var e = legacy[i];
+    e.style.removeProperty('background-color');
+    e.style.removeProperty('background-image');
+    e.style.removeProperty('color');
+    e.style.removeProperty('text-shadow');
+    delete e.dataset.wbSkinOrigBg;
+    delete e.dataset.wbSkinOrigImg;
+    delete e.dataset.wbSkinText;
   }
-  // 只透明化最外层（深度最浅）的前 12 个，覆盖侧边栏/顶栏/主区等多层容器
-  found.sort(function (a, b) { return a.depth - b.depth; });
-  var transparentized = [];
-  for (var k = 0; k < Math.min(12, found.length); k++) {
-    var t = found[k];
-    var els = document.querySelectorAll('body *');
-    for (var m = 0; m < els.length; m++) {
-      var e = els[m];
-      if (e === document.body) continue;
-      var er = e.getBoundingClientRect();
-      if (er.width * er.height < area * 0.08) continue;
-      var ecs = window.getComputedStyle(e);
-      var ebgc = ecs.backgroundColor;
-      var eopaque = ebgc && ebgc !== 'transparent' && ebgc !== 'rgba(0, 0, 0, 0)';
-      if (e.tagName === t.tag && (e.className === t.cls) && eopaque) {
-        // 保存原背景值，供 --restore 时还原
-        e.dataset.wbSkinOrigBg = ecs.backgroundColor;
-        e.dataset.wbSkinOrigImg = ecs.backgroundImage;
-        e.style.backgroundColor = 'transparent';
-        e.style.backgroundImage = 'none';
-      }
-    }
-    transparentized.push(t.tag + (t.cls ? '.' + t.cls.split(' ')[0] : '') + (t.id ? '#' + t.id : ''));
-  }
-
-${textInfo ? `
-  /* 兜底：侧栏内部分文本（如置顶对话标题/时间）被 app 用更高 specificity 的
-     !important 黑字规则覆盖，文档层 CSS 赢不过它；内联 style 的 !important
-     优先级高于任何选择器，故这里直接对深色文字元素强制自适应文字色 */
-  (function(){
-    var sb = document.querySelector('.conversation-sidebar'); if (!sb) return;
-    var tc = ${JSON.stringify(textInfo.textColor)}, ts = ${JSON.stringify(textInfo.textShadow || '')};
-    var nodes = sb.querySelectorAll('*');
-    for (var i = 0; i < nodes.length; i++) {
-      var el = nodes[i];
-      if (el.children.length > 0) continue;
-      if (!el.textContent || !el.textContent.trim()) continue;
-      var tag = el.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'BUTTON' || tag === 'A' || tag === 'SELECT' || tag === 'CODE' || tag === 'PRE') continue;
-      var cs = window.getComputedStyle(el);
-      var inner = cs.color.split('(')[1]; if (!inner) continue;
-      inner = inner.split(')')[0].split(',');
-      var lum = 0.299*(+inner[0]) + 0.587*(+inner[1]) + 0.114*(+inner[2]);
-      if (!isNaN(lum) && lum < 120) {
-        el.style.setProperty('color', tc, 'important');
-        if (ts) el.style.setProperty('text-shadow', ts, 'important');
-        el.dataset.wbSkinText = '1';
-      }
-    }
-  })();
-` : ''}
-  return {
-    viewport: vw + 'x' + vh,
-    candidateContainers: found.slice(0, 8),
-    transparentized: transparentized
-  };
+  return 'restored style+menu, cleared ' + legacy.length + ' legacy nodes';
 })()`;
-}
 
 async function getTargets(port) {
   const res = await fetch(`http://127.0.0.1:${port}/json/list`);
@@ -415,7 +221,6 @@ async function main() {
   }
   if (pages.length === 0) { console.error('✗ 未找到 page target，无法注入。'); process.exit(1); }
 
-  // 确定要注入的 target
   let chosen = pages;
   if (a.target !== undefined) {
     if (a.target < 0 || a.target >= pages.length) { console.error(`✗ target 下标越界（0~${pages.length - 1}）`); process.exit(1); }
@@ -423,30 +228,11 @@ async function main() {
   }
 
   if (a.restore) {
-    console.log(`恢复官方外观：还原容器背景并移除注入…`);
-    const restoreJs = `(function(){
-      var els = document.querySelectorAll('[data-wb-skin-orig-bg]');
-      var n = els.length;
-      for (var i = 0; i < els.length; i++) {
-        els[i].style.backgroundColor = els[i].dataset.wbSkinOrigBg;
-        els[i].style.backgroundImage = els[i].dataset.wbSkinOrigImg;
-        delete els[i].dataset.wbSkinOrigBg;
-        delete els[i].dataset.wbSkinOrigImg;
-      }
-      // 清理内联 important 强制文字色（侧栏兜底）
-      var txt = document.querySelectorAll('[data-wb-skin-text]');
-      for (var j = 0; j < txt.length; j++) {
-        txt[j].style.removeProperty('color');
-        txt[j].style.removeProperty('text-shadow');
-        delete txt[j].dataset.wbSkinText;
-      }
-      var s = document.getElementById('__wb_skin_style__'); if (s) s.remove();
-      return 'restored ' + n + ' containers, cleared ' + txt.length + ' forced text';
-    })()`;
+    console.log('恢复官方外观：移除注入样式与 🎨 菜单…');
     for (const t of chosen) {
       try {
         const cdp = await CDP.connect(t.webSocketDebuggerUrl);
-        const r = await cdp.send('Runtime.evaluate', { expression: restoreJs, returnByValue: true });
+        const r = await cdp.send('Runtime.evaluate', { expression: RESTORE_JS, returnByValue: true });
         cdp.close();
         console.log(`  ✓ ${t.title || t.url}  (${r && r.result && r.result.value})`);
       } catch (e) { console.error(`  ✗ ${t.title}: ${e.message}`); }
@@ -455,31 +241,67 @@ async function main() {
     return;
   }
 
-  const dataUrl = await imageToDataUrl(a.image);
-  let textInfo = null;
-  if (dataUrl && a.autoText && !a.css) {
-    textInfo = analyzeBackground(resolve(a.image), a.autoTextThreshold);
-    if (textInfo) {
-      console.log(`  背景分析：${textInfo.mode}（亮度 ${textInfo.luminance}）→ 文字颜色 ${textInfo.textColor}，建议遮罩 ${textInfo.recommendedOpacity}`);
+  // ---- 构造皮肤 ----
+  let activeCss = null;
+  let activeColors = null;
+  let activeName = '当前背景';
+
+  if (a.css) {
+    activeCss = await readFile(resolve(a.css), 'utf8');
+    activeName = basename(resolve(a.css));
+  } else {
+    const dataUrl = await imageToDataUrl(a.image);
+    let info = { mode: 'dark' };
+    if (dataUrl && a.autoText) {
+      const analyzed = analyzeBackground(resolve(a.image), a.autoTextThreshold);
+      if (analyzed) {
+        info = analyzed;
+        console.log(`  背景分析：${analyzed.mode}（亮度 ${analyzed.luminance}）→ 文字色自动适配`);
+      }
     }
+    activeColors = paletteFromLuminance(info);
+    activeCss = buildSkinCss({ imageDataUrl: dataUrl, colors: activeColors, opts: { opacity: a.opacity, cardBg: a.cardBg } });
+    activeName = a.image ? basename(resolve(a.image)) : '纯色渐变';
   }
 
-  // 解析 --card-bg auto：根据背景明暗自动选择浅色/深色卡片底纹
-  let effectiveCardBg = a.cardBg;
-  if (effectiveCardBg === 'auto') {
-    effectiveCardBg = textInfo && textInfo.mode === 'dark'
-      ? 'rgba(40,40,48,0.90)'
-      : 'rgba(245,245,245,0.92)';
+  // ---- 组装菜单条目：当前背景 + 内置预设 ----
+  const entries = [{
+    id: 'active',
+    name: activeName,
+    accent: activeColors?.accent,
+    surface: activeColors?.surface,
+    css: activeCss,
+  }];
+
+  // 内置预设：scripts/background.png（本仓库自带的干净渐变壁纸，无版权风险）
+  const presetPath = resolve(SCRIPT_DIR, 'background.png');
+  if (!a.css && existsSync(presetPath)) {
+    try {
+      const pData = await imageToDataUrl(presetPath);
+      const pInfo = analyzeBackground(presetPath, a.autoTextThreshold) || { mode: 'dark' };
+      const pColors = paletteFromLuminance(pInfo);
+      entries.push({
+        id: 'preset-gradient',
+        name: '默认渐变',
+        accent: pColors.accent,
+        surface: pColors.surface,
+        css: buildSkinCss({ imageDataUrl: pData, colors: pColors, opts: { opacity: a.opacity, cardBg: a.cardBg } }),
+      });
+    } catch (e) { console.warn(`  ⚠ 预设壁纸加载失败，跳过：${e.message}`); }
   }
 
-  const css = a.css
-    ? await readFile(resolve(a.css), 'utf8')
-    : buildDefaultCss(dataUrl, a.opacity, effectiveCardBg, textInfo);
-  const injectJs = buildInjectJs(css, textInfo);
+  // ---- 注入 ----
+  let injectJs;
+  if (a.css || a.noMenu) {
+    injectJs = buildStyleOnlyScript(activeCss);
+  } else {
+    injectJs = '(()=>{var o=document.getElementById("__wb_skin_style__");if(o)o.remove();})();\n'
+      + buildSkinMenuScript({ entries, activeId: 'active', cssTemplate: buildSkinCssTemplate() });
+  }
 
-  console.log(dataUrl
-    ? `注入背景图：${resolve(a.image)}（遮罩 ${a.opacity}，内容底纹 ${effectiveCardBg}${textInfo ? '，自动文字 ' + textInfo.mode : ''}）`
-    : `注入纯色渐变背景（未指定 --image，内容底纹 ${effectiveCardBg}）`);
+  console.log(a.css
+    ? `注入自定义 CSS：${resolve(a.css)}`
+    : `注入背景图：${a.image ? resolve(a.image) : '(纯色渐变)'}（遮罩 ${a.opacity}${a.noMenu ? '，无菜单' : '，🎨 菜单已加载'}）`);
   console.log(`目标页面 ${chosen.length} 个：\n`);
 
   for (const t of chosen) {
@@ -487,18 +309,21 @@ async function main() {
       const cdp = await CDP.connect(t.webSocketDebuggerUrl);
       const r = await cdp.send('Runtime.evaluate', { expression: injectJs, returnByValue: true });
       cdp.close();
-      const v = r && r.result && r.result.value;
-      console.log(`  ✓ ${t.title || t.url}`);
-      if (v && a.verbose) {
-        console.log(`     视口: ${v.viewport}`);
-        console.log(`     已透明化容器: ${(v.transparentized || []).join(', ') || '(无)'}`);
-        console.log(`     候选容器: ${JSON.stringify(v.candidateContainers)}`);
+      const err = r && r.exceptionDetails;
+      if (err) {
+        console.error(`  ✗ ${t.title || t.url}  JS 异常: ${JSON.stringify(err.exception?.description || err.text).slice(0, 300)}`);
+      } else {
+        console.log(`  ✓ ${t.title || t.url}`);
       }
     } catch (e) {
       console.error(`  ✗ ${t.title}: ${e.message}`);
     }
   }
-  console.log('\n完成。若背景未生效，请用 --verbose 查看 DOM 结构后精确调整。');
+  if (!a.css && !a.noMenu) {
+    console.log('\n完成。WorkBuddy 右上角出现 🎨 按钮：可切换背景、上传自定义图片（自动取色）、或还原原生界面。');
+  } else {
+    console.log('\n完成。');
+  }
 }
 
 main().catch(e => { console.error('✗ 未捕获错误:', e); process.exit(1); });
