@@ -336,8 +336,8 @@ export function buildSkinMenuScript({ entries, activeId, styleId = STYLE_ID, men
   const uploadRow = row('＋ 自定义图片', 'rgba(36,201,215,.9)', () => picker.click());
   uploadRow.style.borderTop = '1px solid rgba(0,0,0,.08)';
 
-  const nativeLight = row('原生界面（白）', 'rgba(248,250,255,.95)', () => { setNativeMode('light'); panel.style.display = 'none'; });
-  const nativeDark = row('原生界面（黑）', 'rgba(20,22,28,.95)', () => { setNativeMode('dark'); panel.style.display = 'none'; });
+  const nativeLight = row('原生界面（浅色）', 'rgba(248,250,255,.95)', () => { setNativeMode('light'); panel.style.display = 'none'; });
+  const nativeDark = row('原生界面（黑色）', 'rgba(20,22,28,.95)', () => { setNativeMode('dark'); panel.style.display = 'none'; });
   rows.set('native-light', nativeLight);
   rows.set('native-dark', nativeDark);
 

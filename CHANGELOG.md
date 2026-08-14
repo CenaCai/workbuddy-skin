@@ -105,7 +105,7 @@ node scripts/inject.mjs --list
 
 ### v0.5.2 — 2026-08-14
 
-- **“原生界面”拆分为两个独立选项**：菜单中原来的单一“原生界面”改为「原生界面（白）」与「原生界面（黑）」两项，点击分别清空皮肤样式并显式切到 WorkBuddy 原生浅色 / 深色模式（类 `light vscode-light cb-light` / `dark vscode-dark cb-dark`），背景图与所有皮肤配色一并移除。
+- **“原生界面”拆分为两个独立选项**：菜单中原来的单一“原生界面”改为「原生界面（浅色）」与「原生界面（黑色）」两项，点击分别清空皮肤样式并显式切到 WorkBuddy 原生浅色 / 深色模式（类 `light vscode-light cb-light` / `dark vscode-dark cb-dark`），背景图与所有皮肤配色一并移除。
 - **选中态跟踪**：新增 `activeNativeKey` 跟踪当前选中的原生模式，菜单重新打开时高亮对应的原生项。
 - `window.__wbSkin` 测试钩子新增 `setNativeMode('light' | 'dark')`。
 
