@@ -18,7 +18,9 @@
  */
 import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { resolve, extname } from 'node:path';
+import { resolve, extname, dirname } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 const HELP = `用法: node inject.mjs [选项]
 
@@ -26,7 +28,9 @@ const HELP = `用法: node inject.mjs [选项]
   --image <path>  背景图片路径（png/jpg/jpeg/webp/gif）
   --css <path>    自定义 CSS 文件路径（覆盖内置背景样式）
   --opacity <f>   背景遮罩不透明度 0~1（默认 0.45，越大越暗）
-  --card-bg <rgba> 消息/回复内容底纹颜色（默认 rgba(245,245,245,0.92)）
+  --card-bg <rgba|auto|transparent> 消息底纹（默认 auto：随背景明暗自动切换；transparent 禁用）
+  --auto-text [true|false] 根据背景明暗自动调整文字颜色（默认 true）
+  --auto-text-threshold <n> 自动文字颜色阈值 0~255（默认 128）
   --restore       恢复官方外观（移除注入）
   --list          仅列出可注入的页面 target，不注入
   --target <i>    指定 target 下标（配合 --list 结果使用）
@@ -35,7 +39,7 @@ const HELP = `用法: node inject.mjs [选项]
 `;
 
 function parseArgs(argv) {
-  const a = { port: 9222, opacity: 0.45, cardBg: 'rgba(245,245,245,0.92)', restore: false, list: false, verbose: false };
+  const a = { port: 9222, opacity: 0.45, cardBg: 'auto', autoText: true, autoTextThreshold: 128, restore: false, list: false, verbose: false };
   let i = 2;
   const need = (flag) => {
     const v = argv[++i];
@@ -49,6 +53,12 @@ function parseArgs(argv) {
       case '--css': a.css = need('--css'); break;
       case '--opacity': a.opacity = parseFloat(need('--opacity')); break;
       case '--card-bg': a.cardBg = need('--card-bg'); break;
+      case '--auto-text': {
+        const v = need('--auto-text');
+        a.autoText = v.toLowerCase() === 'true' || v === '1' || v.toLowerCase() === 'yes' || v.toLowerCase() === 'on' || v.toLowerCase() === 'enable';
+        break;
+      }
+      case '--auto-text-threshold': a.autoTextThreshold = parseFloat(need('--auto-text-threshold')); break;
       case '--restore': a.restore = true; break;
       case '--list': a.list = true; break;
       case '--target': a.target = parseInt(need('--target'), 10); break;
@@ -99,6 +109,8 @@ const IMAGE_MIME = {
   '.webp': 'image/webp', '.gif': 'image/gif', '.avif': 'image/avif', '.bmp': 'image/bmp',
 };
 
+const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
+
 async function imageToDataUrl(path) {
   if (!path) return null;
   const abs = resolve(path);
@@ -108,8 +120,90 @@ async function imageToDataUrl(path) {
   return `data:${mime};base64,${buf.toString('base64')}`;
 }
 
+/** 调用 Python 分析背景图明暗 */
+function analyzeBackground(imagePath, threshold) {
+  const analyzer = resolve(SCRIPT_DIR, 'analyze-bg.py');
+  if (!existsSync(analyzer)) return null;
+  try {
+    const python = process.env.WB_PYTHON || 'python3';
+    const out = execFileSync(python, [analyzer, resolve(imagePath), String(threshold)], { encoding: 'utf8', timeout: 15000 });
+    return JSON.parse(out);
+  } catch (e) {
+    console.warn(`  ⚠ 背景亮度分析失败：${e.message}，将跳过自动文字颜色`);
+    return null;
+  }
+}
+
+/** 根据背景明暗生成文字颜色覆盖规则 */
+function buildTextRules({ textColor, secondaryTextColor, textShadow }) {
+  return `
+/* 根据背景明暗自动调整文字颜色（输入框、任务栏、侧边栏、消息内容等） */
+:root {
+  --wb-auto-text: ${textColor};
+  --wb-auto-text-secondary: ${secondaryTextColor};
+  --wb-text-shadow: ${textShadow};
+}
+
+/* 顶部状态栏文字 */
+.workbuddy-topbar,
+.workbuddy-topbar *,
+.workbuddy-topbar--mac,
+.workbuddy-topbar--mac *,
+.workbuddy-topbar--scrolled,
+.workbuddy-topbar--scrolled *,
+.workbuddy-topbar--primary,
+.workbuddy-topbar--primary * {
+  color: var(--wb-auto-text) !important;
+  text-shadow: 0 1px 2px var(--wb-text-shadow) !important;
+}
+
+/* 侧边栏/目录列表文字 */
+[class*="conversationList"],
+[class*="conversationList"] *,
+[class*="gridViewItem"],
+[class*="gridViewItem"] *,
+[class*="sidebar"],
+[class*="sidebar"] * {
+  color: var(--wb-auto-text) !important;
+  text-shadow: 0 1px 2px var(--wb-text-shadow) !important;
+}
+
+/* AI 回复与用户消息文字 */
+.cb-markdown,
+.cb-markdown p, .cb-markdown h1, .cb-markdown h2, .cb-markdown h3,
+.cb-markdown h4, .cb-markdown h5, .cb-markdown h6, .cb-markdown li,
+.cb-markdown ul, .cb-markdown ol, .cb-markdown blockquote,
+.cb-markdown span, .cb-markdown div:not(.cb-markdown-pre-container):not(.cb-markdown-pre-wrapper),
+.cb-markdown strong, .cb-markdown em,
+[class*="userMessageBubble"],
+[class*="userMessageBubble"] * {
+  color: var(--wb-auto-text) !important;
+  text-shadow: 0 1px 2px var(--wb-text-shadow) !important;
+}
+
+/* 输入框（textarea / contenteditable / input） */
+input, textarea, [contenteditable], [contenteditable] *,
+[role="textbox"], [role="textbox"] * {
+  color: var(--wb-auto-text) !important;
+  text-shadow: 0 1px 2px var(--wb-text-shadow) !important;
+}
+input::placeholder, textarea::placeholder, [contenteditable]:empty::before {
+  color: var(--wb-auto-text-secondary) !important;
+}
+
+/* 保护代码块语法高亮：不覆盖 pre/code 内的颜色 */
+.cb-markdown pre, .cb-markdown pre *,
+.cb-markdown code, .cb-markdown code *,
+.cb-markdown-pre-container, .cb-markdown-pre-container *,
+.cb-markdown-pre-wrapper, .cb-markdown-pre-wrapper * {
+  color: inherit !important;
+  text-shadow: none !important;
+}
+`;
+}
+
 /** 默认背景 CSS：铺满 + 暗色遮罩保证文字可读 */
-function buildDefaultCss(dataUrl, opacity, cardBg) {
+function buildDefaultCss(dataUrl, opacity, cardBg, textInfo) {
   const overlay = `rgba(10,12,16,${opacity})`;
   const bgImage = dataUrl
     ? `linear-gradient(${overlay}, ${overlay}), url("${dataUrl}")`
@@ -154,6 +248,7 @@ function buildDefaultCss(dataUrl, opacity, cardBg) {
   -webkit-backdrop-filter: blur(4px) !important;
 }
 `;
+  const textRules = textInfo ? buildTextRules(textInfo) : '';
   return `
 html { background: transparent !important; }
 body {
@@ -166,6 +261,7 @@ body {
 }
 ${topbarRules}
 ${cardRules}
+${textRules}
 `;
 }
 
@@ -296,14 +392,30 @@ async function main() {
   }
 
   const dataUrl = await imageToDataUrl(a.image);
+  let textInfo = null;
+  if (dataUrl && a.autoText && !a.css) {
+    textInfo = analyzeBackground(resolve(a.image), a.autoTextThreshold);
+    if (textInfo) {
+      console.log(`  背景分析：${textInfo.mode}（亮度 ${textInfo.luminance}）→ 文字颜色 ${textInfo.textColor}，建议遮罩 ${textInfo.recommendedOpacity}`);
+    }
+  }
+
+  // 解析 --card-bg auto：根据背景明暗自动选择浅色/深色卡片底纹
+  let effectiveCardBg = a.cardBg;
+  if (effectiveCardBg === 'auto') {
+    effectiveCardBg = textInfo && textInfo.mode === 'dark'
+      ? 'rgba(40,40,48,0.90)'
+      : 'rgba(245,245,245,0.92)';
+  }
+
   const css = a.css
     ? await readFile(resolve(a.css), 'utf8')
-    : buildDefaultCss(dataUrl, a.opacity, a.cardBg);
+    : buildDefaultCss(dataUrl, a.opacity, effectiveCardBg, textInfo);
   const injectJs = buildInjectJs(css);
 
   console.log(dataUrl
-    ? `注入背景图：${resolve(a.image)}（遮罩 ${a.opacity}，内容底纹 ${a.cardBg}）`
-    : `注入纯色渐变背景（未指定 --image，内容底纹 ${a.cardBg}）`);
+    ? `注入背景图：${resolve(a.image)}（遮罩 ${a.opacity}，内容底纹 ${effectiveCardBg}${textInfo ? '，自动文字 ' + textInfo.mode : ''}）`
+    : `注入纯色渐变背景（未指定 --image，内容底纹 ${effectiveCardBg}）`);
   console.log(`目标页面 ${chosen.length} 个：\n`);
 
   for (const t of chosen) {

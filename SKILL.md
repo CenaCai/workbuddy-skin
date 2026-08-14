@@ -22,6 +22,7 @@ Apply a custom background image, wallpaper, or full CSS theme to the **WorkBuddy
 - WorkBuddy is an Electron 37 + Chromium 138 app. CDP injection requires the renderer launched with `--remote-debugging-port=<PORT>`. This flag is **only settable at launch**, so the *first* injection requires restarting WorkBuddy with the port open.
 - Once started with the port, the port stays online and the agent session recovers, so **subsequent image swaps need NO restart** — just re-run `inject.mjs --image <img>`.
 - Injection dynamically locates large opaque DOM containers, saves their original background to a `dataset` attribute, and transparentizes them; then sets a body background image plus an optional dark overlay (`--opacity`).
+- A Python helper (`analyze-bg.py`) samples the left/center region of the wallpaper and classifies it as `dark` or `light`; `inject.mjs` then auto-selects white/black text colors and light/dark message card backgrounds (`--card-bg auto`).
 - The macOS system title bar (traffic-light row) is OS window chrome, **outside** the render layer — cannot be themed by any injection approach.
 
 ## Usage
@@ -33,6 +34,7 @@ cd ~/.workbuddy/skills/workbuddy-skin/scripts
 ./apply-skin.sh --image /path/to/bg.png
 # custom overlay:     ./apply-skin.sh --image bg.png --opacity 0.6
 # content card shade: ./apply-skin.sh --image bg.png --card-bg "rgba(245,245,245,0.92)"
+# disable auto-text:  ./apply-skin.sh --image bg.png --auto-text false
 # custom CSS theme:   ./apply-skin.sh --css my-theme.css
 # custom port:        WB_SKIN_PORT=9333 ./apply-skin.sh --image bg.png
 ```
@@ -42,8 +44,10 @@ cd ~/.workbuddy/skills/workbuddy-skin/scripts
 ```bash
 cd ~/.workbuddy/skills/workbuddy-skin/scripts
 node inject.mjs --image /path/to/bg.png --opacity 0.03
-# 加内容底纹：
-node inject.mjs --image /path/to/bg.png --opacity 0.03 --card-bg "rgba(245,245,245,0.92)"
+# 加内容底纹（auto 会根据背景明暗自动选浅色/深色）：
+node inject.mjs --image /path/to/bg.png --opacity 0.03 --card-bg auto
+# 关闭自动文字颜色：
+node inject.mjs --image /path/to/bg.png --opacity 0.03 --auto-text false
 ```
 
 ### Restore
@@ -55,7 +59,8 @@ cd ~/.workbuddy/skills/workbuddy-skin/scripts
 
 ## Scripts (in `scripts/`)
 
-- `inject.mjs` — zero-dependency CDP injector (Node 22 built-in WebSocket/fetch). Flags: `--port`, `--image`, `--css`, `--opacity` (default 0.45), `--card-bg` (default `rgba(245,245,245,0.92)`), `--restore`, `--list`, `--target`, `--verbose`, `--help`.
+- `inject.mjs` — zero-dependency CDP injector (Node 22 built-in WebSocket/fetch). Flags: `--port`, `--image`, `--css`, `--opacity` (default 0.45), `--card-bg` (default `auto`; also accepts `transparent` or an explicit rgba), `--auto-text` (default `true`), `--auto-text-threshold` (default 128), `--restore`, `--list`, `--target`, `--verbose`, `--help`.
+- `analyze-bg.py` — Python helper used by `inject.mjs` to classify wallpaper brightness and pick text/card colors (requires Pillow).
 - `apply-skin.sh` — quit → relaunch with port → inject (one-shot; restarts the app).
 - `restore.sh` — runtime restore of injected styles.
 - `start-debug.sh [port]` — relaunch with port only (no injection), for DOM inspection via Chrome `chrome://inspect`.
@@ -64,7 +69,8 @@ cd ~/.workbuddy/skills/workbuddy-skin/scripts
 ## Critical gotchas
 
 - **Opacity by theme:** light WorkBuddy theme + light background → set `--opacity` near 0 (0.03–0.05) so text stays readable; dark background → raise opacity (0.4–0.6) for contrast. The default 0.45 is wrong for light backgrounds.
-- **Readability of chat text on busy backgrounds:** use `--card-bg` to add a semi-transparent light box behind user message bubbles and AI `.cb-markdown` content. Default is `rgba(245,245,245,0.92)`; set to `transparent` to disable.
+- **Auto text & card colors:** when `--auto-text` is enabled (default), `inject.mjs` runs `analyze-bg.py` on the wallpaper. It chooses black text + light message cards for light backgrounds, and white text + dark message cards for dark backgrounds. Disable with `--auto-text false`.
+- **Readability of chat text on busy backgrounds:** use `--card-bg` to add a semi-transparent box behind user message bubbles and AI `.cb-markdown` content. Default `auto` picks `rgba(245,245,245,0.92)` for light themes and `rgba(40,40,48,0.90)` for dark themes; set to `transparent` to disable.
 - **Readability of user photos:** expand to 16:9 with the subject off to one side and large clean negative space where chat text sits (center/left). See the workflow in `references/how-it-works.md`.
 - **Do NOT copy `#` comment lines** from docs into the terminal — `#` is treated as a command and errors with `command not found: #`.
 - **Example image paths** in docs (e.g. `~/Pictures/wallpaper.jpg`) are placeholders; the script defaults to the bundled `background.png` when no `--image`/`--css` is given.

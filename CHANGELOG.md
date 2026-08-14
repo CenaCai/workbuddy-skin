@@ -1,10 +1,10 @@
 # 更新日志 / Changelog
 
-本文件记录 **workbuddy-skin** 技能的演变过程。当前最新版本为 **v0.3.0**。
+本文件记录 **workbuddy-skin** 技能的演变过程。当前最新版本为 **v0.4.0**。
 
 ---
 
-## 当前设定总结（v0.3.0）
+## 当前设定总结（v0.4.0）
 
 一句话：**通过 Electron/Chromium 的 CDP 通道，在运行时把任意图片注入为 WorkBuddy 桌面端的整体背景，并自动给消息内容加底纹、让顶部状态栏与背景融为一体，全程零侵入（不修改 `app.asar`、二进制或签名）。**
 
@@ -27,6 +27,7 @@ workbuddy-skin/
 ├── references/how-it-works.md    # 底层机制、真机 DOM 类名表、透明化启发式、踩坑
 └── scripts/
     ├── inject.mjs                # 零依赖 CDP 注入器（核心）
+    ├── analyze-bg.py             # Python 背景亮度分析器（Pillow）
     ├── apply-skin.sh             # 一键：退出 → 带调试端口重启 → 注入
     ├── restore.sh                # 运行时还原
     ├── start-debug.sh            # 仅带端口重启（DOM 调试）
@@ -41,23 +42,29 @@ workbuddy-skin/
 | `--image <path>` | — | 背景图片路径（建议 16:9）；不指定则注入纯色渐变 |
 | `--css <path>` | — | 自定义 CSS 主题（替代默认背景规则） |
 | `--opacity <f>` | `0.45` | 背景遮罩不透明度（浅色图用 `0.03`~`0.05`，深色图用 `0.1`~`0.3`） |
-| `--card-bg <rgba>` | `rgba(245,245,245,0.92)` | 消息/回复内容底纹；传 `transparent` 可禁用 |
+| `--card-bg <rgba\|auto\|transparent>` | `auto` | 消息/回复内容底纹；`auto` 随背景明暗自动切换，传 `transparent` 可禁用 |
+| `--auto-text [true\|false]` | `true` | 根据背景明暗自动调整文字颜色 |
+| `--auto-text-threshold <n>` | `128` | 自动文字颜色亮度阈值（0~255） |
 | `--restore` | — | 还原官方外观 |
 | `--list` | — | 查看当前注入状态 |
 | `--verbose` | — | 输出注入细节 |
 | `--help` | — | 帮助 |
 
-### 自动生效的三件事
+### 自动生效的四件事
 
 1. **整体背景**：`body` 铺满背景图 + 暗/亮遮罩（`--opacity` 控制）。
-2. **消息底纹**：AI 回复（`.cb-markdown`、`.cb-markdown-pre-wrapper`）与用户消息（`[class*="userMessageBubble"]`）自动加半透明浅色圆角底纹，保证复杂背景上文字可读；代码块容器单独用半透明深色，避免破坏高亮。
-3. **顶部状态栏融合**：显式强制 `.workbuddy-topbar`（及 `--mac`/`--scrolled`/`--primary` 变体）透明并加 `backdrop-filter: blur(4px)`，使任务名/搜索/分享/历史提问/展开右栏那一块与壁纸连成整体。
+2. **背景亮度分析**：`scripts/analyze-bg.py` 采样壁纸左 60% 区域，按感知亮度公式判断 `dark`/`light`。
+3. **消息底纹与自适应文字**：根据分析结果自动切换——
+   - 浅色背景 → 黑色文字 + 浅色消息底纹（`rgba(245,245,245,0.92)`）
+   - 深色背景 → 白色文字 + 深色消息底纹（`rgba(40,40,48,0.90)`）
+   - 代码块容器单独用半透明深色，避免破坏语法高亮。
+4. **顶部状态栏融合**：显式强制 `.workbuddy-topbar`（及 `--mac`/`--scrolled`/`--primary` 变体）透明并加 `backdrop-filter: blur(4px)`，使任务名/搜索/分享/历史提问/展开右栏那一块与壁纸连成整体。
 
 ### 日常使用命令
 
 ```bash
 # 换壁纸（调试端口已在线时无需重启）
-node scripts/inject.mjs --port 9222 --image /path/to/bg.png --opacity 0.03 --card-bg "rgba(245,245,245,0.92)"
+node scripts/inject.mjs --port 9222 --image /path/to/bg.png --opacity 0.03
 
 # 一键重启并注入（首次或端口未开时用）
 ./scripts/apply-skin.sh --image /path/to/bg.png --opacity 0.03
@@ -86,6 +93,22 @@ node scripts/inject.mjs --list
 ---
 
 ## 版本历史
+
+### v0.4.0 — 2026-08-14
+
+- **新增背景自适应文字颜色与自动消息底纹**：
+  - 新增 `scripts/analyze-bg.py`：用 Pillow 采样壁纸左 60% 区域，按感知亮度公式 `0.299R+0.587G+0.114B` 输出 `dark`/`light`、推荐文字颜色、遮罩不透明度。
+  - `inject.mjs` 新增 `--auto-text`（默认 `true`）与 `--auto-text-threshold`（默认 `128`）。
+  - 根据分析结果自动注入：浅色背景 → 黑色文字 + `text-shadow: 0 1px 2px rgba(255,255,255,0.6)`；深色背景 → 白色文字 + `text-shadow: 0 1px 2px rgba(0,0,0,0.5)`。
+  - 覆盖元素：顶部状态栏（`.workbuddy-topbar` 及其变体）、侧边栏/目录列表、AI 回复 `.cb-markdown`、用户消息气泡、`input`/`textarea`/`[contenteditable]` 输入框。
+  - 代码块 `pre/code` 及 `.cb-markdown-pre-container` 被显式保护，避免破坏语法高亮。
+- **`--card-bg` 默认改为 `auto`**：
+  - 浅色背景 → `rgba(245,245,245,0.92)`
+  - 深色背景 → `rgba(40,40,48,0.90)`
+  - 仍接受显式 rgba 或 `transparent`。
+- **`apply-skin.sh` / `restore.sh` 自动检测托管 Python**：优先使用 `/Users/cenacai/.workbuddy/binaries/python/versions/3.13.12/bin/python3`（已预装 Pillow），避免系统 `python3` 缺少依赖导致分析失败。
+- 更新 `README.md` / `SKILL.md` / `references/how-it-works.md` 说明新参数与行为。
+- 提交：`(待填写)`
 
 ### v0.3.0 — 2026-08-14
 

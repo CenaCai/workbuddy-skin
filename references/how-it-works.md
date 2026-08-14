@@ -25,10 +25,11 @@ WorkBuddy 桌面端 = Electron 37.10.3 + Chromium 138 + `app.asar`，存在 `Wor
    - 仅当元素有不透明 `backgroundColor` 或非 `none` 的 `backgroundImage` 才处理。
    - 按 DOM 深度升序，透明化前 **12** 个（原 4，已提高到 12）最外层大容器，把原背景存进 `dataset.wbSkinOrigBg` / `dataset.wbSkinOrigImg` 后再置为 `transparent` / `none`。
 4. 给 `body` 设背景图 + 暗色遮罩：`body { background-image: linear-gradient(rgba(10,12,16,OPACITY), ...), url(<dataURL>); background-size: cover; background-attachment: fixed; }`。
-5. 可选 `--card-bg`：给 AI 回复区（`.cb-markdown`）和用户消息气泡（`[class*="userMessageBubble"]`）加半透明浅色底纹（默认 `rgba(245,245,245,0.92)`），保证复杂背景图上的文字可读。代码块容器（`.cb-markdown-pre-container`）单独使用半透明深色背景，避免浅色底纹破坏代码高亮。
-6. `--restore` 时遍历 `[data-wb-skin-orig-bg]`，还原 `dataset` 中的原值并删除属性，再移除 `<style>` 标签。**彻底还原的前提是透明化前已把原背景存入 dataset**（否则只删 style 标签无法复原被改过的容器）。
+5. 可选 `--card-bg`：给 AI 回复区（`.cb-markdown`）和用户消息气泡（`[class*="userMessageBubble"]`）加半透明底纹。默认 `auto` 会根据背景明暗自动选择浅色（`rgba(245,245,245,0.92)`）或深色（`rgba(40,40,48,0.90)`）；传 `transparent` 禁用。
+6. `--auto-text`（默认开启）：注入前调用 `scripts/analyze-bg.py` 采样壁纸左 60% 区域（侧边栏+聊天区），按感知亮度公式判断 `dark`/`light`，并注入对应的文字颜色（黑/白）、placeholder 颜色与 `text-shadow`。目标覆盖：顶部状态栏、侧边栏、消息内容、输入框/textarea/contenteditable。代码块（`pre/code`）被显式保护，避免破坏语法高亮。
+7. `--restore` 时遍历 `[data-wb-skin-orig-bg]`，还原 `dataset` 中的原值并删除属性，再移除 `<style>` 标签。**彻底还原的前提是透明化前已把原背景存入 dataset**（否则只删 style 标签无法复原被改过的容器）。
 
-CLI 参数：`--port`（默认 9222）、`--image`、`--css`、`--opacity`（默认 0.45）、`--card-bg`（默认 `rgba(245,245,245,0.92)`，传 `transparent` 禁用）、`--restore`、`--list`、`--target`、`--verbose`、`--help`。
+CLI 参数：`--port`（默认 9222）、`--image`、`--css`、`--opacity`（默认 0.45）、`--card-bg`（默认 `auto`）、`--auto-text`（默认 `true`）、`--auto-text-threshold`（默认 128）、`--restore`、`--list`、`--target`、`--verbose`、`--help`。
 
 ## 4. 真机观察到的 WorkBuddy DOM 类名
 

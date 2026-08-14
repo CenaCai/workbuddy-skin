@@ -4,7 +4,7 @@
 
 > 原理与 [Fei-Away/Codex-Dream-Skin](https://github.com/Fei-Away/Codex-Dream-Skin) 同源（WorkBuddy 与 Codex 同为 Electron/Chromium），但 WorkBuddy 的 DOM 与 Codex 不同，因此本方案用**动态透明化启发式**自适应真实界面，而非硬编码部件选择器。
 
-📌 **当前版本 v0.3.0** · 完整设定总结与版本历史见 [CHANGELOG.md](./CHANGELOG.md)。
+📌 **当前版本 v0.4.0** · 完整设定总结与版本历史见 [CHANGELOG.md](./CHANGELOG.md)。
 
 ---
 
@@ -47,6 +47,7 @@ cd workbuddy-skin/scripts
 ```bash
 ./apply-skin.sh --image bg.png --opacity 0.6                    # 自定义暗色遮罩
 ./apply-skin.sh --image bg.png --card-bg "rgba(240,240,240,0.9)" # 给消息/回复加灰框底纹
+./apply-skin.sh --image bg.png --auto-text false                 # 关闭自动文字颜色
 ./apply-skin.sh --css   my-theme.css                            # 使用自定义 CSS 主题
 WB_SKIN_PORT=9333 ./apply-skin.sh --image bg.png                 # 自定义调试端口
 ```
@@ -63,7 +64,11 @@ node inject.mjs --image /path/to/新图.png --opacity 0.03
 
 > 浅色主题 + 浅色背景：`--opacity` 用 0.03–0.05；深色背景：0.4–0.6。默认值 0.45 不适合浅色背景。
 >
-> 如果背景图复杂导致 AI 回复/用户消息文字看不清，加 `--card-bg "rgba(245,245,245,0.92)"` 给内容区加灰框底纹。
+> **自动文字颜色与底纹**：从 v0.4.0 起，`--card-bg` 默认 `auto`，脚本会先分析背景图亮度：
+> - 浅色背景 → 黑色文字 + 浅色消息底纹（`rgba(245,245,245,0.92)`）
+> - 深色背景 → 白色文字 + 深色消息底纹（`rgba(40,40,48,0.90)`）
+>
+> 如果背景图复杂导致文字仍看不清，可手动指定 `--card-bg` 或调整 `--opacity`。
 
 ### 3. 还原
 
@@ -78,8 +83,9 @@ node inject.mjs --image /path/to/新图.png --opacity 0.03
 
 | 文件 | 作用 |
 |------|------|
-| `scripts/inject.mjs` | 零依赖 CDP 注入器（Node 22 内置 WebSocket/fetch）。支持 `--port`/`--image`/`--css`/`--opacity`/`--card-bg`/`--restore`/`--list`/`--verbose`/`--help` |
-| `scripts/apply-skin.sh` | 一键：退出 → 带调试端口重启 → 注入 |
+| `scripts/inject.mjs` | 零依赖 CDP 注入器（Node 22 内置 WebSocket/fetch）。支持 `--port`/`--image`/`--css`/`--opacity`/`--card-bg`/`--auto-text`/`--auto-text-threshold`/`--restore`/`--list`/`--verbose`/`--help` |
+| `scripts/analyze-bg.py` | Python 辅助：分析背景图亮度，输出 `dark`/`light` 及推荐文字颜色/遮罩（需 Pillow） |
+| `scripts/apply-skin.sh` | 一键：退出 → 带调试端口重启 → 注入（自动检测托管 Python） |
 | `scripts/restore.sh` | 运行时还原注入样式 |
 | `scripts/start-debug.sh` | 仅带端口重启（不注入），供 Chrome `chrome://inspect` 观察 DOM |
 | `scripts/background.png` | 内置默认占位壁纸 |
