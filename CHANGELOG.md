@@ -6,7 +6,7 @@
 
 ## 当前设定总结（v0.5.0）
 
-一句话：**通过 Electron/Chromium 的 CDP 通道，在运行时把任意图片注入为 WorkBuddy 桌面端的整体背景；用稳定 DOM 锚点 + WorkBuddy 原生 `--cb-*` 设计令牌做全局换色与透明化，并提供一个应用内 🎨 菜单随时切换背景或上传图片，全程零侵入（不修改 `app.asar`、二进制或签名）。**
+一句话：**通过 Electron/Chromium 的 CDP 通道，在运行时把任意图片注入为 WorkBuddy 桌面端的整体背景；用稳定 DOM 锚点 + WorkBuddy 原生 `--cb-*` 设计令牌做全局换色与透明化，并提供一个应用内 换肤 菜单随时切换背景或上传图片，全程零侵入（不修改 `app.asar`、二进制或签名）。**
 
 ### 机制
 
@@ -17,7 +17,7 @@
   - 这些锚点不是 CSS-module 哈希类名，跨版本稳定；不再依赖 v0.4.x 的“扫描 `body *` + 面积阈值 ≥ 8%”启发式。
 - **原生 `--cb-*` 设计令牌覆盖（v0.5.0）**：WorkBuddy 自身使用 `--cb-text-primary`、`--cb-bg-primary` 等 token。通过 `!important` 覆写这些 token，可全局切换文字色并压过 app 自带的 `!important` 黑字规则；同时把背景 token 设为 `transparent`，让 `#root` 壁纸显示。这取代了 v0.4.x 复杂的“逐个元素内联强制”兜底逻辑。
 - **磨砂玻璃面板**：侧边栏、主内容区底部、详情面板使用 `color-mix()` + `backdrop-filter: blur(...)`，在透出背景图的同时保证文字可读。
-- **应用内 🎨 菜单**：注入成功后，WorkBuddy 右上角出现菜单按钮，可切换当前背景 / 内置预设、上传本地图片（Canvas 自动取色）、一键还原原生界面。
+- **应用内 换肤 菜单**：注入成功后，WorkBuddy 右上角出现菜单按钮，可切换当前背景 / 内置预设、上传本地图片（Canvas 自动取色）、一键还原原生界面。
 - **还原性**：`--restore` 移除新样式标签（`wb-skin-studio-style` / `wb-skin-studio-menu`），并清理旧版 v0.4.x 残留（`__wb_skin_style__` 与内联 `dataset` 标记）。
 - **零依赖**：`inject.mjs` 仅用 Node 22 内置的 `WebSocket` / `fetch`，无需 `npm install`。
 
@@ -40,7 +40,7 @@ workbuddy-skin/
     ├── background.png            # 内置占位壁纸（深紫蓝渐变）
     └── src/
         ├── skin-css.mjs          # CSS 生成器（锚点 + token + 磨砂玻璃）
-        └── skin-menu.mjs         # 应用内 🎨 菜单脚本生成器
+        └── skin-menu.mjs         # 应用内 换肤 菜单脚本生成器
 ```
 
 ### 核心参数（`inject.mjs`）
@@ -54,7 +54,7 @@ workbuddy-skin/
 | `--card-bg <rgba\|auto\|transparent>` | `auto` | 消息/回复内容底纹；`auto` 随背景明暗自动切换，传 `transparent` 可禁用 |
 | `--auto-text [true\|false]` | `true` | 根据背景明暗自动调整文字颜色 |
 | `--auto-text-threshold <n>` | `128` | 自动文字颜色亮度阈值（0~255） |
-| `--no-menu` | — | 仅注入背景，不加载应用内 🎨 菜单 |
+| `--no-menu` | — | 仅注入背景，不加载应用内 换肤 菜单 |
 | `--restore` | — | 还原官方外观 |
 | `--list` | — | 查看当前注入状态 |
 | `--verbose` | — | 输出注入细节 |
@@ -70,7 +70,7 @@ workbuddy-skin/
 ### 日常使用命令
 
 ```bash
-# 换壁纸（调试端口已在线时无需重启），默认带 🎨 菜单
+# 换壁纸（调试端口已在线时无需重启），默认带 换肤 菜单
 node scripts/inject.mjs --port 9222 --image /path/to/bg.png --opacity 0.45
 
 # 不需要应用内菜单
@@ -116,7 +116,7 @@ node scripts/inject.mjs --list
   -  wallpaper 挂到 `#root`，面板透明化改用 `.teams-container` 与 `[data-view-id]`（`sidebar` / `main-content` / `detail-panel` / `sources-panel`），彻底替换 v0.4.x 的“扫描 `body *` + 面积阈值 ≥ 8%”启发式。
   -  用 `!important` 覆写 WorkBuddy 原生 `--cb-text-primary/secondary/disabled/link`、`--cb-vscode-foreground`、`--cb-bg-primary/secondary`、`--cb-panel-bg-primary` 等 token，全局切换文字色并压过 app 自带的 `!important` 黑字规则；背景 token 设为 `transparent` 让壁纸透出。这解决了 v0.4.2 需要“内联 JS 强制兜底”的根源问题。
   -  面板使用 `color-mix()` + `backdrop-filter: blur(...)` 磨砂玻璃，兼顾背景图透出与文字可读。
-- **新增应用内 🎨 菜单**：注入后 WorkBuddy 右上角出现菜单按钮，可切换当前背景 / 内置预设、上传本地图片（页内 Canvas 自动取色）、一键还原原生界面。
+- **新增应用内 换肤 菜单**：注入后 WorkBuddy 右上角出现菜单按钮，可切换当前背景 / 内置预设、上传本地图片（页内 Canvas 自动取色）、一键还原原生界面。
 - **新增 `--no-menu` 参数**：CLI 换图时可选择不加载应用内菜单。
 - **代码结构模块化**：新增 `scripts/src/skin-css.mjs` 与 `scripts/src/skin-menu.mjs`，CSS 模板与菜单脚本同源生成，避免两套逻辑漂移。
 - **向后兼容**：保留全部旧 CLI 参数；`--restore` 同时清理新版 `wb-skin-studio-style` / `wb-skin-studio-menu` 与旧版 `__wb_skin_style__` 残留。
