@@ -3,12 +3,12 @@
  * WorkBuddy 界面背景注入脚本（基于 Chrome DevTools Protocol / CDP）
  *
  * v0.5.0：融合 cdredfox/workbuddy-skin-studio 的“稳定锚点 + --cb-* 设计令牌 +
- * 应用内 🎨 菜单”思路。背景透明化不再依赖“扫描 body * + 面积阈值”的脆弱启发式，
+ * 应用内 切换背景 菜单”思路。背景透明化不再依赖“扫描 body * + 面积阈值”的脆弱启发式，
  * 而是锚定 #root / .teams-container / [data-view-id] 等稳定选择器，并用 --cb-text-*
- * 令牌全局换文字色；同时注入一个 🎨 菜单，可随时切换背景、上传自定义图片（自动取色）。
+ * 令牌全局换文字色；同时注入一个 切换背景 菜单，可随时切换背景、上传自定义图片（自动取色）。
  *
  * 用法：
- *   node inject.mjs --image /path/to/bg.png            # 注入背景图 + 🎨 菜单
+ *   node inject.mjs --image /path/to/bg.png            # 注入背景图 + 切换背景 菜单
  *   node inject.mjs --image bg.png --opacity 0.4       # 自定义遮罩不透明度
  *   node inject.mjs --image bg.png --no-menu           # 仅注入背景，不加载菜单
  *   node inject.mjs --css my-theme.css                 # 使用自定义 CSS（跳过菜单）
@@ -41,7 +41,7 @@ const HELP = `用法: node inject.mjs [选项]
   --card-bg <rgba|auto|transparent> 消息底纹（默认 auto：随背景明暗自动）
   --auto-text [true|false] 根据背景明暗自动调整文字颜色（默认 true）
   --auto-text-threshold <n> 自动文字颜色阈值 0~255（默认 128）
-  --no-menu       仅注入背景，不加载 🎨 菜单
+  --no-menu       仅注入背景，不加载 切换背景 菜单
   --restore       恢复官方外观（移除注入与菜单）
   --list          仅列出可注入的页面 target，不注入
   --target <i>    指定 target 下标（配合 --list 结果使用）
@@ -228,7 +228,7 @@ async function main() {
   }
 
   if (a.restore) {
-    console.log('恢复官方外观：移除注入样式与 🎨 菜单…');
+    console.log('恢复官方外观：移除注入样式与 切换背景 菜单…');
     for (const t of chosen) {
       try {
         const cdp = await CDP.connect(t.webSocketDebuggerUrl);
@@ -301,7 +301,7 @@ async function main() {
 
   console.log(a.css
     ? `注入自定义 CSS：${resolve(a.css)}`
-    : `注入背景图：${a.image ? resolve(a.image) : '(纯色渐变)'}（遮罩 ${a.opacity}${a.noMenu ? '，无菜单' : '，🎨 菜单已加载'}）`);
+    : `注入背景图：${a.image ? resolve(a.image) : '(纯色渐变)'}（遮罩 ${a.opacity}${a.noMenu ? '，无菜单' : '，切换背景 菜单已加载'}）`);
   console.log(`目标页面 ${chosen.length} 个：\n`);
 
   for (const t of chosen) {

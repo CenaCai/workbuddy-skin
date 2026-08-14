@@ -24,8 +24,9 @@ Apply a custom background image, wallpaper, or full CSS theme to the **WorkBuddy
 - v0.5.0 anchors on stable DOM selectors (`#root`, `.teams-container`, `[data-view-id]`) instead of scanning the whole DOM. The wallpaper is attached to `#root`; panels are transparentized via `--cb-bg-*` token overrides so the wallpaper shows through.
 - WorkBuddy's native `--cb-*` design tokens (`--cb-text-primary`, `--cb-bg-primary`, etc.) are overridden with `!important` to switch global text color and transparentize backgrounds. This replaces the v0.4.x inline-style fallback.
 - Frosted-glass panels use `color-mix()` + `backdrop-filter: blur(...)` for readability while preserving the wallpaper feel.
-- A Python helper (`analyze-bg.py`) samples the wallpaper and classifies it as `dark` or `light`; `inject.mjs` then auto-selects text and card colors. The in-app 🎨 menu lives in the main topbar (left of the in-conversation search button) and uses page-side Canvas palette extraction for uploaded images.
+- A Python helper (`analyze-bg.py`) samples the wallpaper and classifies it as `dark` or `light`; `inject.mjs` then auto-selects text and card colors. The in-app 「切换背景」menu lives in the main topbar (left of the in-conversation search button) and uses page-side Canvas palette extraction for uploaded images.
 - The macOS system title bar (traffic-light row) is OS window chrome, **outside** the render layer — cannot be themed by any injection approach.
+- v0.5.3 adds a `MutationObserver` on `#root` that re-mounts the topbar button if React removes it during re-renders (e.g. switching native light/dark), so the button never silently disappears.
 
 ## Usage
 
@@ -63,7 +64,7 @@ cd ~/.workbuddy/skills/workbuddy-skin/scripts
 
 - `inject.mjs` — zero-dependency CDP injector (Node 22 built-in WebSocket/fetch). Flags: `--port`, `--image`, `--css`, `--opacity` (default 0.45), `--card-bg` (default `auto`; also accepts `transparent` or an explicit rgba), `--auto-text` (default `true`), `--auto-text-threshold` (default 128), `--no-menu`, `--restore`, `--list`, `--target`, `--verbose`, `--help`.
 - `src/skin-css.mjs` — CSS generator: stable anchors + `--cb-*` token overrides + frosted glass.
-- `src/skin-menu.mjs` — In-app 🎨 menu script generator: switch backgrounds, upload images with auto palette extraction, restore.
+- `src/skin-menu.mjs` — In-app 「切换背景」menu script generator: switch backgrounds, upload images with auto palette extraction, restore.
 - `analyze-bg.py` — Python helper used by `inject.mjs` to classify wallpaper brightness and pick text/card colors (requires Pillow).
 - `apply-skin.sh` — quit → relaunch with port → inject (one-shot; restarts the app).
 - `restore.sh` — runtime restore of injected styles.
@@ -91,7 +92,7 @@ Themes built for Codex/CodeBuddy (e.g. `HeiGeAi/heige-codex-skin-studio`, the `d
 `cdredfox/workbuddy-skin-studio` is specifically built for WorkBuddy and **is compatible in concept**. v0.5.0 intentionally fuses its good parts:
 
 - Stable DOM anchors (`#root`, `.teams-container`, `[data-view-id]`) and `--cb-*` token overrides for global theming.
-- In-app 🎨 menu with background switching, custom image upload, and Canvas palette extraction.
+- In-app 切换背景 菜单 with background switching, custom image upload, and Canvas palette extraction.
 - Modular `src/` structure with shared CSS templates.
 
 We deliberately do **not** copy its 9223 port default, Windows scripts, anime-themed assets, or `theme.json` catalog; this skill keeps the single-image CLI model and macOS-focused shell helpers.

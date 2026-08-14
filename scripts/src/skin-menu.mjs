@@ -1,4 +1,4 @@
-// WorkBuddy 皮肤菜单（🎨 按钮 + 切换 / 自定义上传 / 还原原生）
+// WorkBuddy 皮肤菜单（切换背景 按钮 + 切换 / 自定义上传 / 还原原生）
 //
 // 融合自 cdredfox/workbuddy-skin-studio 的 skin-menu.mjs（MIT），并按本技能
 // 的 token 体系（--wb-text / --wb-frost）做了适配：自定义上传时用 Canvas 取色，
