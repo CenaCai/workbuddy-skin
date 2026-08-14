@@ -7,8 +7,9 @@
 > - **v0.5.1**：菜单按钮移入顶部功能栏、改用 WorkBuddy 同款图标、选中态改为浅黄，并修复"还原原生界面"时颜色未完整还原的问题。
 > - **v0.5.2**："原生界面"拆为「原生界面（浅色）」/「原生界面（黑色）」两项，分别切到 WorkBuddy 原生浅色 / 深色模式。
 > - **v0.5.3**：修复"切换背景"按钮在 React 重渲染（如切换原生浅色/深色）后消失的问题——新增 `MutationObserver` 自愈挂载，按钮一旦被移除会自动挂回原位置。
+> - **v0.5.4**：新增 launchd 常驻守护（`workbuddy-skin-daemon.mjs` + LaunchAgent），让 WorkBuddy 始终带调试端口运行，并在自动更新 / 重启后自动恢复注入的皮肤，无需再手动跑 `apply-skin.sh`。
 
-📌 **当前版本 v0.5.3** · 完整设定总结与版本历史见 [CHANGELOG.md](./CHANGELOG.md)。
+📌 **当前版本 v0.5.4** · 完整设定总结与版本历史见 [CHANGELOG.md](./CHANGELOG.md)。
 
 ---
 
@@ -116,6 +117,33 @@ node inject.mjs --image /path/to/bg.png --no-menu
 
 - **优点**：完全不经过客户端图片风控，本地任意图片都能用。
 - **代价**：界面融合性一般——上传的是什么就用什么，没有 Skill 的智能构图优化，需要你自己挑选 / 预处理一张与界面协调的底图。
+
+---
+
+## 常驻守护：调试端口与皮肤自动恢复（v0.5.4）
+
+上面的注入是**运行时（内存）态**——WorkBuddy 自动更新 / 被普通方式重启后，调试端口与注入的皮肤都会清空（这也是「切换背景」按钮"又没了"的常见原因）。为避免每次都手动跑 `apply-skin.sh`，仓库附带一个 **launchd 常驻守护**：
+
+- `scripts/workbuddy-skin-daemon.mjs`：每轮巡检 WorkBuddy 状态——
+  1. 没在跑 → 带端口启动（可用 `WB_SKIN_NO_AUTOSTART=1` 关闭"未运行也启动"）；
+  2. 在跑但端口没开 → 退出并以带端口方式重启（覆盖自动更新 / 普通双击启动）；
+  3. 端口开着但皮肤未注入 → 自动重新注入（默认背景；若你上次上传过自定义图片，会从 `localStorage` 一并恢复）；
+  4. 已注入 → 不做事。
+- 配套 `~/Library/LaunchAgents/com.cenacai.workbuddy.skin.plist`：`RunAtLoad` + 每 30s 巡检一次。
+
+启用（会**重启一次 WorkBuddy**以带端口，请在不依赖当前会话时执行）：
+
+```bash
+launchctl load ~/Library/LaunchAgents/com.cenacai.workbuddy.skin.plist
+```
+
+停用：
+
+```bash
+launchctl unload ~/Library/LaunchAgents/com.cenacai.workbuddy.skin.plist
+```
+
+> 注意：守护启用后 WorkBuddy 会始终保持运行（即使你手动退出，守护也会在 30s 内重新带端口拉起）。若想彻底退出 WorkBuddy，先 `unload` 守护即可。自动恢复以"默认背景"为基准；若你上次处于「原生界面（浅色/黑色）」或自定义皮肤，重启后需重新点选（**自定义图片会自动恢复，原生模式目前不持久化**）。
 
 ---
 

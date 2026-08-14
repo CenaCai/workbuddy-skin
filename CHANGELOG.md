@@ -1,6 +1,6 @@
 # 更新日志 / Changelog
 
-本文件记录 **workbuddy-skin** 技能的演变过程。当前最新版本为 **v0.5.3**。
+本文件记录 **workbuddy-skin** 技能的演变过程。当前最新版本为 **v0.5.4**。
 
 ---
 
@@ -102,6 +102,13 @@ node scripts/inject.mjs --list
 ---
 
 ## 版本历史
+
+### v0.5.4 — 2026-08-14
+
+- **常驻守护（自动恢复）**：新增 `scripts/workbuddy-skin-daemon.mjs` 与 `~/Library/LaunchAgents/com.cenacai.workbuddy.skin.plist`，解决"注入是运行时内存态、WorkBuddy 自动更新 / 普通重启后按钮与端口全清"的问题。
+  - 守护每轮巡检：WorkBuddy 没在跑 → 带端口启动（可用 `WB_SKIN_NO_AUTOSTART=1` 关闭）；在跑但端口没开 → 退出并以带端口方式重启（覆盖自动更新 / 双击启动）；端口开着但未注入 → 自动重新注入（默认背景，并从 `localStorage` 恢复上次自定义上传）；已注入 → 不动。
+  - `RunAtLoad` + 每 30s 巡检；日志写入 `workbuddy-skin-daemon.log`。
+  - 仅新增文件，**不改**任何注入逻辑；零依赖（Node 22 内置 WebSocket/fetch/child_process）。
 
 ### v0.5.3 — 2026-08-14
 
