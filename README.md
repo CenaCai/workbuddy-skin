@@ -43,9 +43,10 @@ cd workbuddy-skin/scripts
 常用变体：
 
 ```bash
-./apply-skin.sh --image bg.png --opacity 0.6     # 自定义暗色遮罩
-./apply-skin.sh --css   my-theme.css             # 使用自定义 CSS 主题
-WB_SKIN_PORT=9333 ./apply-skin.sh --image bg.png # 自定义调试端口
+./apply-skin.sh --image bg.png --opacity 0.6                    # 自定义暗色遮罩
+./apply-skin.sh --image bg.png --card-bg "rgba(240,240,240,0.9)" # 给消息/回复加灰框底纹
+./apply-skin.sh --css   my-theme.css                            # 使用自定义 CSS 主题
+WB_SKIN_PORT=9333 ./apply-skin.sh --image bg.png                 # 自定义调试端口
 ```
 
 不带 `--image`/`--css` 时，脚本默认使用内置的 `background.png` 占位图。
@@ -59,6 +60,8 @@ node inject.mjs --image /path/to/新图.png --opacity 0.03
 ```
 
 > 浅色主题 + 浅色背景：`--opacity` 用 0.03–0.05；深色背景：0.4–0.6。默认值 0.45 不适合浅色背景。
+>
+> 如果背景图复杂导致 AI 回复/用户消息文字看不清，加 `--card-bg "rgba(245,245,245,0.92)"` 给内容区加灰框底纹。
 
 ### 3. 还原
 
@@ -73,7 +76,7 @@ node inject.mjs --image /path/to/新图.png --opacity 0.03
 
 | 文件 | 作用 |
 |------|------|
-| `scripts/inject.mjs` | 零依赖 CDP 注入器（Node 22 内置 WebSocket/fetch）。支持 `--port`/`--image`/`--css`/`--opacity`/`--restore`/`--list`/`--verbose`/`--help` |
+| `scripts/inject.mjs` | 零依赖 CDP 注入器（Node 22 内置 WebSocket/fetch）。支持 `--port`/`--image`/`--css`/`--opacity`/`--card-bg`/`--restore`/`--list`/`--verbose`/`--help` |
 | `scripts/apply-skin.sh` | 一键：退出 → 带调试端口重启 → 注入 |
 | `scripts/restore.sh` | 运行时还原注入样式 |
 | `scripts/start-debug.sh` | 仅带端口重启（不注入），供 Chrome `chrome://inspect` 观察 DOM |

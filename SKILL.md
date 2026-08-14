@@ -31,9 +31,10 @@ Run in the user's **own terminal**, not inside the agent session:
 ```bash
 cd ~/.workbuddy/skills/workbuddy-skin/scripts
 ./apply-skin.sh --image /path/to/bg.png
-# custom overlay:   ./apply-skin.sh --image bg.png --opacity 0.6
-# custom CSS theme: ./apply-skin.sh --css my-theme.css
-# custom port:      WB_SKIN_PORT=9333 ./apply-skin.sh --image bg.png
+# custom overlay:     ./apply-skin.sh --image bg.png --opacity 0.6
+# content card shade: ./apply-skin.sh --image bg.png --card-bg "rgba(245,245,245,0.92)"
+# custom CSS theme:   ./apply-skin.sh --css my-theme.css
+# custom port:        WB_SKIN_PORT=9333 ./apply-skin.sh --image bg.png
 ```
 `apply-skin.sh` quits WorkBuddy, relaunches it with `--remote-debugging-port=9222`, waits for the port and render, then injects.
 
@@ -41,6 +42,8 @@ cd ~/.workbuddy/skills/workbuddy-skin/scripts
 ```bash
 cd ~/.workbuddy/skills/workbuddy-skin/scripts
 node inject.mjs --image /path/to/bg.png --opacity 0.03
+# 加内容底纹：
+node inject.mjs --image /path/to/bg.png --opacity 0.03 --card-bg "rgba(245,245,245,0.92)"
 ```
 
 ### Restore
@@ -52,7 +55,7 @@ cd ~/.workbuddy/skills/workbuddy-skin/scripts
 
 ## Scripts (in `scripts/`)
 
-- `inject.mjs` — zero-dependency CDP injector (Node 22 built-in WebSocket/fetch). Flags: `--port`, `--image`, `--css`, `--opacity` (default 0.45), `--restore`, `--list`, `--target`, `--verbose`, `--help`.
+- `inject.mjs` — zero-dependency CDP injector (Node 22 built-in WebSocket/fetch). Flags: `--port`, `--image`, `--css`, `--opacity` (default 0.45), `--card-bg` (default `rgba(245,245,245,0.92)`), `--restore`, `--list`, `--target`, `--verbose`, `--help`.
 - `apply-skin.sh` — quit → relaunch with port → inject (one-shot; restarts the app).
 - `restore.sh` — runtime restore of injected styles.
 - `start-debug.sh [port]` — relaunch with port only (no injection), for DOM inspection via Chrome `chrome://inspect`.
@@ -61,6 +64,7 @@ cd ~/.workbuddy/skills/workbuddy-skin/scripts
 ## Critical gotchas
 
 - **Opacity by theme:** light WorkBuddy theme + light background → set `--opacity` near 0 (0.03–0.05) so text stays readable; dark background → raise opacity (0.4–0.6) for contrast. The default 0.45 is wrong for light backgrounds.
+- **Readability of chat text on busy backgrounds:** use `--card-bg` to add a semi-transparent light box behind user message bubbles and AI `.cb-markdown` content. Default is `rgba(245,245,245,0.92)`; set to `transparent` to disable.
 - **Readability of user photos:** expand to 16:9 with the subject off to one side and large clean negative space where chat text sits (center/left). See the workflow in `references/how-it-works.md`.
 - **Do NOT copy `#` comment lines** from docs into the terminal — `#` is treated as a command and errors with `command not found: #`.
 - **Example image paths** in docs (e.g. `~/Pictures/wallpaper.jpg`) are placeholders; the script defaults to the bundled `background.png` when no `--image`/`--css` is given.

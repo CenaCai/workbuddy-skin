@@ -26,6 +26,7 @@ const HELP = `用法: node inject.mjs [选项]
   --image <path>  背景图片路径（png/jpg/jpeg/webp/gif）
   --css <path>    自定义 CSS 文件路径（覆盖内置背景样式）
   --opacity <f>   背景遮罩不透明度 0~1（默认 0.45，越大越暗）
+  --card-bg <rgba> 消息/回复内容底纹颜色（默认 rgba(245,245,245,0.92)）
   --restore       恢复官方外观（移除注入）
   --list          仅列出可注入的页面 target，不注入
   --target <i>    指定 target 下标（配合 --list 结果使用）
@@ -34,7 +35,7 @@ const HELP = `用法: node inject.mjs [选项]
 `;
 
 function parseArgs(argv) {
-  const a = { port: 9222, opacity: 0.45, restore: false, list: false, verbose: false };
+  const a = { port: 9222, opacity: 0.45, cardBg: 'rgba(245,245,245,0.92)', restore: false, list: false, verbose: false };
   let i = 2;
   const need = (flag) => {
     const v = argv[++i];
@@ -47,6 +48,7 @@ function parseArgs(argv) {
       case '--image': a.image = need('--image'); break;
       case '--css': a.css = need('--css'); break;
       case '--opacity': a.opacity = parseFloat(need('--opacity')); break;
+      case '--card-bg': a.cardBg = need('--card-bg'); break;
       case '--restore': a.restore = true; break;
       case '--list': a.list = true; break;
       case '--target': a.target = parseInt(need('--target'), 10); break;
@@ -107,11 +109,34 @@ async function imageToDataUrl(path) {
 }
 
 /** 默认背景 CSS：铺满 + 暗色遮罩保证文字可读 */
-function buildDefaultCss(dataUrl, opacity) {
+function buildDefaultCss(dataUrl, opacity, cardBg) {
   const overlay = `rgba(10,12,16,${opacity})`;
   const bgImage = dataUrl
     ? `linear-gradient(${overlay}, ${overlay}), url("${dataUrl}")`
     : `linear-gradient(135deg, #14161c 0%, #1d2230 50%, #2a2138 100%)`;
+  const cardRules = cardBg && cardBg !== 'transparent'
+    ? `
+/* 消息/回复内容底纹：保证文字在复杂背景图上可读 */
+[class*="userMessageBubble"],
+.cb-markdown,
+.cb-markdown-pre-wrapper {
+  background-color: ${cardBg} !important;
+  border-radius: 12px !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08) !important;
+}
+.cb-markdown {
+  padding: 12px 16px !important;
+}
+[class*="userMessageBubble"] {
+  padding: 10px 14px !important;
+}
+/* 代码块保持独立背景，不强制变浅 */
+.cb-markdown-pre-container {
+  background-color: rgba(30,30,35,0.85) !important;
+  border-radius: 8px !important;
+}
+`
+    : '';
   return `
 html { background: transparent !important; }
 body {
@@ -122,6 +147,7 @@ body {
   background-attachment: fixed !important;
   background-repeat: no-repeat !important;
 }
+${cardRules}
 `;
 }
 
@@ -254,12 +280,12 @@ async function main() {
   const dataUrl = await imageToDataUrl(a.image);
   const css = a.css
     ? await readFile(resolve(a.css), 'utf8')
-    : buildDefaultCss(dataUrl, a.opacity);
+    : buildDefaultCss(dataUrl, a.opacity, a.cardBg);
   const injectJs = buildInjectJs(css);
 
   console.log(dataUrl
-    ? `注入背景图：${resolve(a.image)}（遮罩 ${a.opacity}）`
-    : '注入纯色渐变背景（未指定 --image）');
+    ? `注入背景图：${resolve(a.image)}（遮罩 ${a.opacity}，内容底纹 ${a.cardBg}）`
+    : `注入纯色渐变背景（未指定 --image，内容底纹 ${a.cardBg}）`);
   console.log(`目标页面 ${chosen.length} 个：\n`);
 
   for (const t of chosen) {

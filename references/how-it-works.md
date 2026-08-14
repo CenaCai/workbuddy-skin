@@ -25,9 +25,10 @@ WorkBuddy 桌面端 = Electron 37.10.3 + Chromium 138 + `app.asar`，存在 `Wor
    - 仅当元素有不透明 `backgroundColor` 或非 `none` 的 `backgroundImage` 才处理。
    - 按 DOM 深度升序，透明化前 **12** 个（原 4，已提高到 12）最外层大容器，把原背景存进 `dataset.wbSkinOrigBg` / `dataset.wbSkinOrigImg` 后再置为 `transparent` / `none`。
 4. 给 `body` 设背景图 + 暗色遮罩：`body { background-image: linear-gradient(rgba(10,12,16,OPACITY), ...), url(<dataURL>); background-size: cover; background-attachment: fixed; }`。
-5. `--restore` 时遍历 `[data-wb-skin-orig-bg]`，还原 `dataset` 中的原值并删除属性，再移除 `<style>` 标签。**彻底还原的前提是透明化前已把原背景存入 dataset**（否则只删 style 标签无法复原被改过的容器）。
+5. 可选 `--card-bg`：给 AI 回复区（`.cb-markdown`）和用户消息气泡（`[class*="userMessageBubble"]`）加半透明浅色底纹（默认 `rgba(245,245,245,0.92)`），保证复杂背景图上的文字可读。代码块容器（`.cb-markdown-pre-container`）单独使用半透明深色背景，避免浅色底纹破坏代码高亮。
+6. `--restore` 时遍历 `[data-wb-skin-orig-bg]`，还原 `dataset` 中的原值并删除属性，再移除 `<style>` 标签。**彻底还原的前提是透明化前已把原背景存入 dataset**（否则只删 style 标签无法复原被改过的容器）。
 
-CLI 参数：`--port`（默认 9222）、`--image`、`--css`、`--opacity`（默认 0.45）、`--restore`、`--list`、`--target`、`--verbose`、`--help`。
+CLI 参数：`--port`（默认 9222）、`--image`、`--css`、`--opacity`（默认 0.45）、`--card-bg`（默认 `rgba(245,245,245,0.92)`，传 `transparent` 禁用）、`--restore`、`--list`、`--target`、`--verbose`、`--help`。
 
 ## 4. 真机观察到的 WorkBuddy DOM 类名
 
@@ -49,7 +50,7 @@ React + CSS Modules，类名被 hash 化（不要依赖固定类名，用动态�
 - 浅色 WorkBuddy 主题 + 浅色背景图：`--opacity` 降到 **0.03–0.05**（越接近 0 越好，否则纸面发灰）。
 - 深色背景图：需要 0.4–0.6 遮罩，但会与黑字冲突——优先保证背景明亮。
 - 用户照片做背景：用 ImageGen image-to-image 拓展为 16:9，人物置于一侧（如右侧 1/3），向中部/左侧延展大块干净留白，确保聊天主区（中左）落在浅色区域，黑色 UI 文字才可读。
-- 副作用：用户消息气泡与代码块容器会被透明化（失去白底卡片感）。需要卡片感时，用 `--css` 单独给这些元素回写上色。
+- 副作用：外层大容器会被透明化，用户消息气泡与代码块容器若被纳入也会失去原背景。`--card-bg` 已内置为这些区域补上可读底纹；如需更精细的卡片效果，可再用 `--css` 覆盖。
 
 ## 6. 端到端验证方法
 
