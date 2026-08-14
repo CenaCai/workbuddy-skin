@@ -137,6 +137,23 @@ function buildDefaultCss(dataUrl, opacity, cardBg) {
 }
 `
     : '';
+  // 顶部状态栏（任务名/搜索/分享/历史提问/展开右栏）：它本身是窄高元素，
+  // 面积占比低于透明化启发式阈值会被漏掉，这里显式强制透明，让它和壁纸融为一体。
+  // 同时加 backdrop-filter 防止滚动时聊天内容从顶栏透出。
+  const topbarRules = `
+/* 顶部状态栏：透明化 + 轻磨砂，和壁纸整体融合 */
+.workbuddy-topbar,
+.workbuddy-topbar--mac,
+.workbuddy-topbar--scrolled,
+.workbuddy-topbar--primary {
+  background-color: transparent !important;
+  background-image: none !important;
+  border-bottom: none !important;
+  box-shadow: none !important;
+  backdrop-filter: blur(4px) !important;
+  -webkit-backdrop-filter: blur(4px) !important;
+}
+`;
   return `
 html { background: transparent !important; }
 body {
@@ -147,6 +164,7 @@ body {
   background-attachment: fixed !important;
   background-repeat: no-repeat !important;
 }
+${topbarRules}
 ${cardRules}
 `;
 }
