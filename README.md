@@ -2,7 +2,10 @@
 
 给 **WorkBuddy 桌面端（macOS）** 换背景图 / 壁纸 / 主题的零侵入方案。基于 Chrome DevTools Protocol（CDP）在运行时注入样式，不修改 `app.asar`、不碰签名、不篡改二进制。
 
-> v0.5.0 融合 [cdredfox/workbuddy-skin-studio](https://github.com/cdredfox/workbuddy-skin-studio) 的核心思路：用 WorkBuddy 稳定 DOM 锚点（`#root` / `.teams-container` / `[data-view-id]`）与原生 `--cb-*` 设计令牌做全局换色，取代 v0.4.x 的“面积阈值扫描 + 逐个元素内联强制”兜底；同时加入应用内 🎨 菜单，可随时切换背景、上传自定义图片（自动取色）、一键还原。
+> **v0.5.0 起新增的能力**：
+> - 改用 WorkBuddy 稳定 DOM 锚点（`#root` / `.teams-container` / `[data-view-id]`）与原生 `--cb-*` 设计令牌做全局换色，取代 v0.4.x"面积阈值扫描 + 逐个元素内联强制"的脆弱兜底；
+> - 新增应用内切换背景菜单：随时切换背景、上传自定义图片（Canvas 自动取色）、一键还原原生界面；
+> - v0.5.1：菜单按钮移入顶部功能栏、改用 WorkBuddy 同款图标、选中态改为浅黄，并修复"还原原生界面"时颜色未完整还原的问题。
 
 📌 **当前版本 v0.5.1** · 完整设定总结与版本历史见 [CHANGELOG.md](./CHANGELOG.md)。
 
@@ -77,9 +80,9 @@ node inject.mjs --image /path/to/新图.png --opacity 0.03
 # 或者直接退出 WorkBuddy 用普通方式重开，注入自动消失
 ```
 
-### 4. 应用内 🎨 菜单（v0.5.1）
+### 4. 应用内切换背景菜单（v0.5.1）
 
-注入成功后，主内容区**顶部功能栏会出现一个调色板按钮**（在“对话内搜索”左侧），无需再开终端即可：
+注入成功后，主内容区**顶部功能栏会出现一个「切换背景」按钮**（WorkBuddy 同款线条图标，位于“对话内搜索”左侧），无需再开终端即可：
 
 - 在当前背景与内置预设之间切换。
 - 上传本地图片，菜单会 Canvas 采样自动提取主色并生成配套配色。
@@ -90,6 +93,26 @@ node inject.mjs --image /path/to/新图.png --opacity 0.03
 ```bash
 node inject.mjs --image /path/to/bg.png --no-menu
 ```
+
+---
+
+## 更换背景图的两种方式
+
+目前给 WorkBuddy 换背景图有两条路径，核心区别在于“图片怎么进来”——是否经过客户端的内容风控。
+
+### 方式一：在对话框里给图片，由 Skill 处理（融合度最好）
+
+在 WorkBuddy 对话框里直接粘贴 / 拖入一张图片，然后让我（Skill）来操作：我会读取图片、按需优化或拓展构图，再用 `inject.mjs` 注入。
+
+- **优点**：整个界面融合度最好。Skill 可以基于原图做智能处理（例如把人物放到一侧、向另一侧延展出大面积留白，保证黑色 UI 文字清晰可读），生成与界面协调度更高的壁纸。
+- **代价**：图片会经过 WorkBuddy 客户端的内容风控（图片审核）。部分图片（含敏感或版权风险的）会被拦截、无法使用。
+
+### 方式二：通过功能栏直接替换背景图（最稳，绕过风控）
+
+点击顶部功能栏「切换背景」按钮（“对话内搜索”左侧，WorkBuddy 同款线条图标），在菜单里选「＋ 自定义图片」从本地选图。图片在浏览器内用 Canvas 采样、自动取色并即时注入，全程不经过对话上传。
+
+- **优点**：完全不经过客户端图片风控，本地任意图片都能用。
+- **代价**：界面融合性一般——上传的是什么就用什么，没有 Skill 的智能构图优化，需要你自己挑选 / 预处理一张与界面协调的底图。
 
 ---
 
@@ -104,7 +127,7 @@ node inject.mjs --image /path/to/bg.png --no-menu
 | `scripts/start-debug.sh` | 仅带端口重启（不注入），供 Chrome `chrome://inspect` 观察 DOM |
 | `scripts/background.png` | 内置默认占位壁纸 |
 | `scripts/src/skin-css.mjs` | CSS 生成器：稳定锚点 + `--cb-*` token 覆盖 + 磨砂玻璃 |
-| `scripts/src/skin-menu.mjs` | 应用内 🎨 菜单脚本生成器：切换背景、上传图片、自动取色、还原 |
+| `scripts/src/skin-menu.mjs` | 应用内切换背景菜单脚本生成器：切换背景、上传图片、自动取色、还原 |
 | `references/how-it-works.md` | 底层机制、DOM 选择器、透明化启发式、踩坑记录 |
 
 ---
