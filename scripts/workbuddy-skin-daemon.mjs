@@ -103,7 +103,7 @@ async function reinject() {
   if (DRY) { log('[dry] 将重新注入皮肤'); return; }
   const r = spawnSync(
     NODE,
-    [resolve(SCRIPT_DIR, 'inject.mjs'), '--port', String(PORT), '--image', resolve(SCRIPT_DIR, 'background.png')],
+    [resolve(SCRIPT_DIR, 'inject.mjs'), '--port', String(PORT), '--image', resolve(SCRIPT_DIR, 'background.png'), '--preserve-state'],
     { encoding: 'utf8' }
   );
   const out = (r.stdout || r.stderr || '').trim();

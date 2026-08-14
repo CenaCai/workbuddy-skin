@@ -42,6 +42,7 @@ const HELP = `用法: node inject.mjs [选项]
   --auto-text [true|false] 根据背景明暗自动调整文字颜色（默认 true）
   --auto-text-threshold <n> 自动文字颜色阈值 0~255（默认 128）
   --no-menu       仅注入背景，不加载 切换背景 菜单
+  --preserve-state 加载菜单但不覆盖 localStorage 中的持久化状态（daemon 重启/自动恢复时使用）
   --restore       恢复官方外观（移除注入与菜单）
   --list          仅列出可注入的页面 target，不注入
   --target <i>    指定 target 下标（配合 --list 结果使用）
@@ -52,7 +53,7 @@ const HELP = `用法: node inject.mjs [选项]
 function parseArgs(argv) {
   const a = {
     port: 9222, opacity: 0.45, cardBg: 'auto', autoText: true, autoTextThreshold: 128,
-    restore: false, list: false, verbose: false, noMenu: false,
+    restore: false, list: false, verbose: false, noMenu: false, preserveState: false,
   };
   let i = 2;
   const need = (flag) => {
@@ -85,6 +86,7 @@ function parseArgs(argv) {
     }
     else if (arg === '--auto-text-threshold') a.autoTextThreshold = parseFloat(need('--auto-text-threshold'));
     else if (arg === '--no-menu') a.noMenu = true;
+    else if (arg === '--preserve-state') a.preserveState = true;
     else if (arg === '--restore') a.restore = true;
     else if (arg === '--list') a.list = true;
     else if (arg === '--target') a.target = parseInt(need('--target'), 10);
@@ -295,7 +297,12 @@ async function main() {
   if (a.css || a.noMenu) {
     injectJs = buildStyleOnlyScript(activeCss);
   } else {
+    // 手动 CLI 换图时，让新注入的背景立即生效，而不是被菜单 persistence 恢复成
+    // 上次保存的 native-light/dark 或自定义上传覆盖。daemon 重注入需保留用户选择，
+    // 因此用 --preserve-state 跳过此覆盖。
+    const resetStateJs = a.preserveState ? '' : `try{localStorage.setItem('wbSkinStudioState',JSON.stringify({mode:'theme',themeId:'active'}));}catch(e){}`;
     injectJs = '(()=>{var o=document.getElementById("__wb_skin_style__");if(o)o.remove();})();\n'
+      + resetStateJs + '\n'
       + buildSkinMenuScript({ entries, activeId: 'active', cssTemplate: buildSkinCssTemplate() });
   }
 
