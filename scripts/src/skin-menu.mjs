@@ -115,6 +115,8 @@ export function buildSkinMenuScript({ entries, activeId, styleId = STYLE_ID, men
   panel.style.cssText = 'display:none;margin-top:8px;min-width:210px;padding:6px;border-radius:12px;border:1px solid rgba(0,0,0,.1);background:rgba(255,255,255,.94);backdrop-filter:blur(16px);box-shadow:0 10px 30px rgba(0,0,0,.18);color:#17344f;';
 
   const rows = new Map();
+  let activeNativeKey = null; // 'native-light' | 'native-dark' | null
+  const currentSelection = () => htmlEl.dataset.wbSkin || activeNativeKey || null;
   const ACTIVE_ROW_BG = 'rgba(255, 193, 7, .18)';
   const ACTIVE_BTN_BG = 'rgba(255, 193, 7, .22)';
   const paint = (id) => {
@@ -134,7 +136,7 @@ export function buildSkinMenuScript({ entries, activeId, styleId = STYLE_ID, men
     text.textContent = label;
     item.append(dot, text);
     item.addEventListener('mouseenter', () => { if (item.style.fontWeight !== '700') item.style.background = 'rgba(0,0,0,.05)'; });
-    item.addEventListener('mouseleave', () => paint(document.documentElement.dataset.wbSkin ?? null));
+    item.addEventListener('mouseleave', () => paint(currentSelection()));
     item.addEventListener('click', () => onPick(item));
     if (before) panel.insertBefore(item, before); else panel.appendChild(item);
     return item;
@@ -183,6 +185,13 @@ export function buildSkinMenuScript({ entries, activeId, styleId = STYLE_ID, men
     delete htmlEl.dataset.wbSkin;
     restoreOriginalMode();
     paint(null);
+  };
+  // 原生界面（白 / 黑）：清空皮肤样式后，显式切到对应原生浅色 / 深色模式
+  const setNativeMode = (mode) => {
+    clearTheme();
+    applyMode(mode === 'dark' ? '#0e1016' : '#ffffff');
+    activeNativeKey = mode === 'light' ? 'native-light' : 'native-dark';
+    paint(activeNativeKey);
   };
 
   for (const theme of data.themes) {
@@ -327,8 +336,10 @@ export function buildSkinMenuScript({ entries, activeId, styleId = STYLE_ID, men
   const uploadRow = row('＋ 自定义图片', 'rgba(36,201,215,.9)', () => picker.click());
   uploadRow.style.borderTop = '1px solid rgba(0,0,0,.08)';
 
-  const native = row('原生界面', 'rgba(0,0,0,.24)', () => { clearTheme(); panel.style.display = 'none'; });
-  rows.set(null, native);
+  const nativeLight = row('原生界面（白）', 'rgba(248,250,255,.95)', () => { setNativeMode('light'); panel.style.display = 'none'; });
+  const nativeDark = row('原生界面（黑）', 'rgba(20,22,28,.95)', () => { setNativeMode('dark'); panel.style.display = 'none'; });
+  rows.set('native-light', nativeLight);
+  rows.set('native-dark', nativeDark);
 
   const saved = loadCustom();
   if (saved) ensureCustomRow(saved);
@@ -350,7 +361,7 @@ export function buildSkinMenuScript({ entries, activeId, styleId = STYLE_ID, men
   else setTheme(data.activeId);
 
   // 供脚本化调用与测试：window.__wbSkin.importFromDataUrl(dataUrl, name)
-  window.__wbSkin = { importFromDataUrl, setTheme, clearTheme, deleteCustom };
+  window.__wbSkin = { importFromDataUrl, setTheme, clearTheme, setNativeMode, deleteCustom };
   return true;
 })()`;
 }

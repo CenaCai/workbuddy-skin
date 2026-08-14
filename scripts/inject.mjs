@@ -320,7 +320,7 @@ async function main() {
     }
   }
   if (!a.css && !a.noMenu) {
-    console.log('\n完成。WorkBuddy 右上角出现 🎨 按钮：可切换背景、上传自定义图片（自动取色）、或还原原生界面。');
+    console.log('\n完成。WorkBuddy 顶部功能栏出现「切换背景」按钮：可切换背景、上传自定义图片（自动取色）、或切换原生浅色/深色界面。');
   } else {
     console.log('\n完成。');
   }
