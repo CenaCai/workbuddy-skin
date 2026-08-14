@@ -1,6 +1,6 @@
 # 更新日志 / Changelog
 
-本文件记录 **workbuddy-skin** 技能的演变过程。当前最新版本为 **v0.5.4**。
+本文件记录 **workbuddy-skin** 技能的演变过程。当前最新版本为 **v0.5.5**。
 
 ---
 
@@ -102,6 +102,11 @@ node scripts/inject.mjs --list
 ---
 
 ## 版本历史
+
+### v0.5.5 — 2026-08-14
+
+- **模式持久化**：`scripts/src/skin-menu.mjs` 在切换皮肤 / 自定义上传 / 原生浅色 / 原生深色时，将当前模式写入 `localStorage`（`wbSkinStudioState`：mode = `theme` | `native-light` | `native-dark` + themeId）；每次（重新）注入时按该状态自动恢复，原生模式不再随重启丢失。守护重注入后无需用户重新点选。
+- 守护 `workbuddy-skin-daemon.mjs` 移除原先的"自定义上传单独恢复"逻辑（改为由菜单统一恢复，避免与持久化原生模式冲突）。
 
 ### v0.5.4 — 2026-08-14
 

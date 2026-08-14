@@ -8,8 +8,9 @@
 > - **v0.5.2**："原生界面"拆为「原生界面（浅色）」/「原生界面（黑色）」两项，分别切到 WorkBuddy 原生浅色 / 深色模式。
 > - **v0.5.3**：修复"切换背景"按钮在 React 重渲染（如切换原生浅色/深色）后消失的问题——新增 `MutationObserver` 自愈挂载，按钮一旦被移除会自动挂回原位置。
 > - **v0.5.4**：新增 launchd 常驻守护（`workbuddy-skin-daemon.mjs` + LaunchAgent），让 WorkBuddy 始终带调试端口运行，并在自动更新 / 重启后自动恢复注入的皮肤，无需再手动跑 `apply-skin.sh`。
+> - **v0.5.5**：模式持久化——`原生界面（浅色）/（黑色）`与自定义皮肤选择写入 `localStorage`，守护重新注入后自动回到上次状态（原生模式不再随重启丢失）。
 
-📌 **当前版本 v0.5.4** · 完整设定总结与版本历史见 [CHANGELOG.md](./CHANGELOG.md)。
+📌 **当前版本 v0.5.5** · 完整设定总结与版本历史见 [CHANGELOG.md](./CHANGELOG.md)。
 
 ---
 
@@ -120,7 +121,7 @@ node inject.mjs --image /path/to/bg.png --no-menu
 
 ---
 
-## 常驻守护：调试端口与皮肤自动恢复（v0.5.4）
+## 常驻守护：调试端口与皮肤自动恢复（v0.5.4 / v0.5.5）
 
 上面的注入是**运行时（内存）态**——WorkBuddy 自动更新 / 被普通方式重启后，调试端口与注入的皮肤都会清空（这也是「切换背景」按钮"又没了"的常见原因）。为避免每次都手动跑 `apply-skin.sh`，仓库附带一个 **launchd 常驻守护**：
 
@@ -143,7 +144,7 @@ launchctl load ~/Library/LaunchAgents/com.cenacai.workbuddy.skin.plist
 launchctl unload ~/Library/LaunchAgents/com.cenacai.workbuddy.skin.plist
 ```
 
-> 注意：守护启用后 WorkBuddy 会始终保持运行（即使你手动退出，守护也会在 30s 内重新带端口拉起）。若想彻底退出 WorkBuddy，先 `unload` 守护即可。自动恢复以"默认背景"为基准；若你上次处于「原生界面（浅色/黑色）」或自定义皮肤，重启后需重新点选（**自定义图片会自动恢复，原生模式目前不持久化**）。
+> 注意：守护启用后 WorkBuddy 会始终保持运行（即使你手动退出，守护也会在 30s 内重新带端口拉起）。若想彻底退出 WorkBuddy，先 `unload` 守护即可。重新注入后菜单会按 `localStorage` 自动恢复到上次状态：**自定义图片、原生界面（浅色/黑色）均会持久化**，无需重新点选（v0.5.5 起）。
 
 ---
 

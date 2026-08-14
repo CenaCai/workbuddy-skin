@@ -35,6 +35,7 @@ export function buildSkinMenuScript({ entries, activeId, styleId = STYLE_ID, men
     sentinels: CSS_SENTINELS,
     customId: 'custom-upload',
     storageKey: 'wbSkinStudioCustom',
+    stateKey: 'wbSkinStudioState',
   });
 
   return `(() => {
@@ -204,12 +205,14 @@ export function buildSkinMenuScript({ entries, activeId, styleId = STYLE_ID, men
     htmlEl.dataset.wbSkin = theme.id;
     applyMode(theme.surface);
     paint(theme.id);
+    saveState('theme', theme.id);
   };
   const clearTheme = () => {
     style.textContent = '';
     delete htmlEl.dataset.wbSkin;
     restoreOriginalMode();
     paint(null);
+    saveState('theme', data.activeId);
   };
   // 原生界面（白 / 黑）：清空皮肤样式后，显式切到对应原生浅色 / 深色模式
   const setNativeMode = (mode) => {
@@ -217,6 +220,7 @@ export function buildSkinMenuScript({ entries, activeId, styleId = STYLE_ID, men
     applyMode(mode === 'dark' ? '#0e1016' : '#ffffff');
     activeNativeKey = mode === 'light' ? 'native-light' : 'native-dark';
     paint(activeNativeKey);
+    saveState(activeNativeKey);
   };
 
   for (const theme of data.themes) {
@@ -283,6 +287,7 @@ export function buildSkinMenuScript({ entries, activeId, styleId = STYLE_ID, men
     applyMode(theme.colors.surface);
     ensureCustomRow(theme);
     paint(data.customId);
+    saveState('theme', data.customId);
   };
 
   let customRow = null;
@@ -318,6 +323,15 @@ export function buildSkinMenuScript({ entries, activeId, styleId = STYLE_ID, men
   const saveCustom = (theme) => {
     try { localStorage.setItem(data.storageKey, JSON.stringify(theme)); }
     catch (error) { console.warn('WorkBuddy Skin：自定义主题图片过大，本次生效但重启后不保留', error); }
+  };
+  // 持久化“当前处于哪种模式”，让守护重新注入后自动回到上次的状态（含原生浅色/深色）
+  const loadState = () => {
+    try { const s = JSON.parse(localStorage.getItem(data.stateKey) || 'null'); return (s && typeof s.mode === 'string') ? s : null; }
+    catch { return null; }
+  };
+  const saveState = (mode, themeId) => {
+    try { localStorage.setItem(data.stateKey, JSON.stringify({ mode, themeId: themeId || null })); }
+    catch (error) { /* 隐私模式等场景下忽略 */ }
   };
 
   const importFromDataUrl = (dataUrl, name) => new Promise((resolve, reject) => {
@@ -382,8 +396,20 @@ export function buildSkinMenuScript({ entries, activeId, styleId = STYLE_ID, men
 
   root.append(panel, picker);
   document.body.appendChild(root);
-  if (data.activeId === null) clearTheme();
-  else setTheme(data.activeId);
+
+  // 持久化恢复（v0.5.5）：重新注入后按 localStorage 里的状态回到上次皮肤或原生模式
+  const savedState = loadState();
+  if (savedState && savedState.mode === 'native-light') {
+    setNativeMode('light');
+  } else if (savedState && savedState.mode === 'native-dark') {
+    setNativeMode('dark');
+  } else if (savedState && savedState.mode === 'theme' && savedState.themeId === data.customId && loadCustom()) {
+    applyCustomTheme(loadCustom());
+  } else if (data.activeId === null) {
+    clearTheme();
+  } else {
+    setTheme(data.activeId);
+  }
 
   // 供脚本化调用与测试：window.__wbSkin.importFromDataUrl(dataUrl, name)
   window.__wbSkin = { importFromDataUrl, setTheme, clearTheme, setNativeMode, deleteCustom };

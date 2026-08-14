@@ -35,7 +35,6 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const NODE = process.env.WB_NODE || '/Users/cenacai/.workbuddy/binaries/node/versions/22.22.2/bin/node';
 const DRY = process.argv.includes('--dry-run');
 const NO_AUTOSTART = process.env.WB_SKIN_NO_AUTOSTART === '1';
-const STORAGE_KEY = 'wbSkinStudioCustom';
 
 const log = (...a) => console.log(`[skin-daemon ${new Date().toISOString()}]`, ...a);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -105,16 +104,7 @@ async function reinject() {
   );
   const out = (r.stdout || r.stderr || '').trim();
   if (out) log(out.split('\n').pop());
-  // 恢复上次自定义上传（若存在）：菜单的 loadCustom 只列出该项，不会自动应用，这里主动恢复
-  try {
-    const saved = await cdpEval(`(() => { try { return JSON.parse(localStorage.getItem('${STORAGE_KEY}')||'null'); } catch { return null; } })()`);
-    if (saved && saved.dataUrl) {
-      await cdpEval(`window.__wbSkin.importFromDataUrl(${JSON.stringify(saved.dataUrl)}, ${JSON.stringify(saved.name || '我的图片')})`);
-      log('已恢复自定义皮肤：', saved.name);
-    }
-  } catch (e) {
-    log('恢复自定义皮肤失败（保留默认背景）：', e.message);
-  }
+  // 皮肤 / 原生模式的持久化恢复由菜单脚本在注入时自动完成（读取 localStorage），此处无需额外处理
 }
 
 async function main() {
