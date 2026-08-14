@@ -1,6 +1,6 @@
 # 更新日志 / Changelog
 
-本文件记录 **workbuddy-skin** 技能的演变过程。当前最新版本为 **v0.5.2**。
+本文件记录 **workbuddy-skin** 技能的演变过程。当前最新版本为 **v0.5.3**。
 
 ---
 
@@ -102,6 +102,12 @@ node scripts/inject.mjs --list
 ---
 
 ## 版本历史
+
+### v0.5.3 — 2026-08-14
+
+- **修复“切换背景”按钮凭空消失**：根因是按钮被命令式插入到 React 受控的顶部功能栏（`.workbuddy-topbar-actions`）。切换主题（含点击「原生界面（浅色/黑色）」）、导航或任何 React 重渲染时，React 在调和子节点时会把不认识的按钮一并移除，而面板与 `<style>` 因挂在 `body`/`head` 上得以幸存。
+- **自愈挂载（MutationObserver）**：新增对稳定节点 `#root` 子树的 `MutationObserver`，按钮一旦脱离文档即在一个 `requestAnimationFrame` 内重新挂回原位置（常态 mutation 回调立即返回、零额外开销）；上一次注入遗留的观察者会在重注入时被 `disconnect()`，避免泄漏。
+- 仅改 `scripts/src/skin-menu.mjs`，无需重新生成样式/CSS。
 
 ### v0.5.2 — 2026-08-14
 

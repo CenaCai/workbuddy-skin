@@ -47,7 +47,8 @@ export function buildSkinMenuScript({ entries, activeId, styleId = STYLE_ID, men
     document.head.appendChild(style);
   }
 
-  // 移除旧菜单（包括可能已插入 topbar 的按钮和回退容器）
+  // 移除旧菜单（包括可能已插入 topbar 的按钮和回退容器）。先断开上一次注入遗留的观察者，避免泄漏
+  if (window.__wbSkinObserver) { try { window.__wbSkinObserver.disconnect(); } catch {} delete window.__wbSkinObserver; }
   document.getElementById(data.menuId)?.remove();
   document.querySelectorAll('button[data-wb-skin-btn]').forEach((b) => {
     const p = b.parentElement;
@@ -75,36 +76,60 @@ export function buildSkinMenuScript({ entries, activeId, styleId = STYLE_ID, men
   button.title = '切换背景';
   button.innerHTML = '<svg viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg" width="16" height="16" class="wb-icon" aria-hidden="true"><path fill-rule="evenodd" d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM8 3a5 5 0 1 1 0 10A5 5 0 0 1 8 3Zm2.5 4a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm-3 3a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm4.5 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"/></svg>';
 
-  // 把按钮放到顶部功能栏“对话内搜索”按钮左侧；找不到则回退到 body 右上角
+  // 把按钮放到顶部功能栏"对话内搜索"按钮左侧；找不到则回退到 body 右上角
   let fallbackRoot = null;
   const mountButton = () => {
-    if (button.parentElement) return true; // 已经挂好
-    // 优先定位主内容区顶部功能栏的“对话内搜索”按钮
+    if (button.isConnected) return true; // 已在文档中
+    // 优先定位主内容区顶部功能栏的"对话内搜索"按钮
     const searchBtn = document.querySelector('button[aria-label*="对话内搜索"]') || document.querySelector('button[aria-label*="搜索"]');
     const actions = searchBtn?.closest('.workbuddy-topbar-actions') || searchBtn?.closest('.conversation-list-topbar-actions');
     if (searchBtn && actions) {
+      if (fallbackRoot && fallbackRoot.parentElement) fallbackRoot.remove(); // 退出回退容器
       actions.insertBefore(button, searchBtn);
       return true;
     }
     return false;
   };
-  if (!mountButton()) {
-    // 页面可能还在渲染 topbar，短暂轮询后回退
-    let attempts = 0;
-    const tryMount = () => {
-      if (mountButton()) return;
-      if (++attempts < 20) setTimeout(tryMount, 100);
-      else {
-        // 回退：固定悬浮在右上角
-        fallbackRoot = document.createElement('div');
-        fallbackRoot.dataset.wbSkinFallback = '1';
-        fallbackRoot.style.cssText = 'position:fixed;top:48px;right:16px;z-index:2147483000;';
-        fallbackRoot.appendChild(button);
-        document.body.appendChild(fallbackRoot);
+  let mountAttempts = 0;
+  const fallbackMount = () => {
+    if (fallbackRoot && fallbackRoot.parentElement) return; // 已在回退容器
+    fallbackRoot = document.createElement('div');
+    fallbackRoot.dataset.wbSkinFallback = '1';
+    fallbackRoot.style.cssText = 'position:fixed;top:48px;right:16px;z-index:2147483000;';
+    fallbackRoot.appendChild(button);
+    document.body.appendChild(fallbackRoot);
+  };
+  const tryMount = () => {
+    if (mountButton()) return;
+    if (++mountAttempts < 20) setTimeout(tryMount, 100);
+    else fallbackMount();
+  };
+  tryMount();
+
+  // 关键修复（v0.5.3）：顶部功能栏是 React 受控区域。切换主题/导航/重渲染时，React 会
+  // 把我们用命令式插入的按钮一并移除（React 不认识它），导致"切换背景"按钮凭空消失。
+  // 用 MutationObserver 监听稳定的 #root 子树：只要按钮脱离文档就尽快挂回，且只在脱离时
+  // 触发一次 rAF，常态下 mutation 回调立即返回、零开销。
+  let reinsertScheduled = false;
+  const observer = new MutationObserver(() => {
+    if (button.isConnected) return;        // 还在文档里，无需处理
+    if (reinsertScheduled) return;
+    reinsertScheduled = true;
+    requestAnimationFrame(() => {
+      reinsertScheduled = false;
+      if (!button.isConnected) {
+        mountAttempts = 0;
+        tryMount();
       }
-    };
-    tryMount();
-  }
+    });
+  });
+  const startObserver = () => {
+    const rootEl = document.getElementById('root');
+    if (rootEl) observer.observe(rootEl, { childList: true, subtree: true });
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', startObserver);
+  else startObserver();
+  window.__wbSkinObserver = observer;
 
   // 下拉面板：fixed 定位，跟随按钮位置
   const root = document.createElement('div');
