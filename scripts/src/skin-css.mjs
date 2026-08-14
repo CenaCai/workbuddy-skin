@@ -129,10 +129,10 @@ html, body { background: transparent !important; }
 
 /* 侧边栏磨砂玻璃 */
 [data-view-id=sidebar] {
-  background: color-mix(in srgb, var(--wb-frost) 92%, transparent) !important;
+  background: color-mix(in srgb, var(--wb-frost) 70%, transparent) !important;
   border-right: 1px solid color-mix(in srgb, var(--wb-accent) 40%, transparent) !important;
-  backdrop-filter: blur(10px) saturate(1.1);
-  -webkit-backdrop-filter: blur(10px) saturate(1.1);
+  backdrop-filter: blur(10px) saturate(1.1) !important;
+  -webkit-backdrop-filter: blur(10px) saturate(1.1) !important;
 }
 /* 主内容区：上方透出底图，下方渐变磨砂保证输入区可读 */
 [data-view-id=main-content] {
